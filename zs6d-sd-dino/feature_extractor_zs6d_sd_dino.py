@@ -1,6 +1,20 @@
-import torch
-from sd-dino.extractor_sd import load_model as load_sd_model, process_features_and_mask
-from extractor_dino import ViTExtractor
+from feature_extractor_zs6d_sd_dino import *
+
+
+sd_dino_feature_extractor = sd_dino_compute_pair_feature()
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 class FusedFeatureExtractor:

@@ -17,6 +17,15 @@ import math
 from sklearn.cluster import KMeans
 from scipy.optimize import linear_sum_assignment
 
+"""
+I am using: 
+CO_PCA = True -> Dimensionality Reduction for better comparison between two images
+FUSE_DINO = True -> Using both SD and DINO feature extraction
+ONLY_DINO = False -> Using both SD and DINO feature extraction
+"""
+
+
+
 # MASK:
 # - Enable masking in feature extraction
 # - Focuses processing on specific areas of the image
@@ -135,7 +144,7 @@ model, aug = load_model(diffusion_ver=VER, image_size=SIZE, num_timesteps=TIMEST
 
 
 
-def compute_pair_feature(model, aug, save_path, files, category, mask=False, dist='cos', real_size=960):
+def sd_dino_compute_pair_feature(model, aug, save_path, files, category, mask=False, dist='cos', real_size=960):
     # Convert category to a list if it's not already one
     if type(category) == str:
         category = [category]
