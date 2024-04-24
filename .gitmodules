@@ -11,3 +11,9 @@
 [submodule "detectron2"]
 	path = detectron2
 	url = https://github.com/facebookresearch/detectron2.git
+[submodule "path/to/submodule/ODISE"]
+	path = path/to/submodule/ODISE
+	url = https://github.com/NVlabs/ODISE.git
+[submodule "ODISE"]
+	path = ODISE
+	url = https://github.com/NVlabs/ODISE.git
