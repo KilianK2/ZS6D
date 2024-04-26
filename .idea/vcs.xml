@@ -2,7 +2,6 @@
 <project version="4">
   <component name="VcsDirectoryMappings">
     <mapping directory="" vcs="Git" />
-    <mapping directory="$PROJECT_DIR$/ODISE" vcs="Git" />
-    <mapping directory="$PROJECT_DIR$/detectron2" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/zs6d-sd-dino/sd-dino" vcs="Git" />
   </component>
 </project>
