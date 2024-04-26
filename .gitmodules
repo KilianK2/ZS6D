@@ -5,15 +5,4 @@
 [submodule "bop_toolkit"]
 	path = bop_toolkit
 	url = https://github.com/thodan/bop_toolkit.git 
-[submodule "sd-dino"]
-	path = sd-dino
-	url = https://github.com/Junyi42/sd-dino
-[submodule "detectron2"]
-	path = detectron2
-	url = https://github.com/facebookresearch/detectron2.git
-[submodule "path/to/submodule/ODISE"]
-	path = path/to/submodule/ODISE
-	url = https://github.com/NVlabs/ODISE.git
-[submodule "ODISE"]
-	path = ODISE
-	url = https://github.com/NVlabs/ODISE.git
+
