@@ -10,7 +10,7 @@ from tqdm import tqdm
 
 class FusedFeatureExtractor:
     def __init__(self, model_type='dino_vits8', dinov2=True, stride=4, pca_dims=[256, 256, 256], image_size=960,
-                 device='cuda', seed=42):
+                 device='cpu', seed=42):
         # Initialize the class with provided parameters and set up the model and device
 
         self.model_type = model_type  # Type of the model to be used
