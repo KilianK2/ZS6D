@@ -35,7 +35,7 @@ class ZS6D:
 
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-        #self.extractor = PoseViTExtractor(model_type=self.model_type, stride=self.stride, device=self.device)
+        self.extractor = PoseViTExtractor(model_type=self.model_type, stride=self.stride, device=self.device)
         """TODO: Utilizing FusedFeatureExtractor"""
         self.extractor = FusedFeatureExtractor(model_type=self.model_type, stride=self.stride, device=self.device)
 
