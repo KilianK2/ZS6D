@@ -9,7 +9,7 @@ import cv2
 import pose_utils.utils as utils
 import logging
 from src.pose_extractor import PoseViTExtractor
-from fused_feature_extractor_v1 import FusedFeatureExtractor
+from fused_feature_extractor_v3 import FusedPoseViTExtractor
 
 class ZS6D:
 
@@ -37,7 +37,7 @@ class ZS6D:
 
         self.extractor = PoseViTExtractor(model_type=self.model_type, stride=self.stride, device=self.device)
         """TODO: Utilizing FusedFeatureExtractor"""
-        self.extractor = FusedFeatureExtractor(model_type=self.model_type, stride=self.stride, device=self.device)
+        self.extractor = FusedPoseViTExtractor(model_type=self.model_type, stride=self.stride, device=self.device)
 
         self.templates_desc = {}
         templates_gt_subset = {}
