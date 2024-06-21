@@ -69,6 +69,7 @@ class ZS6D:
             img_prep, _, _ = self.extractor.preprocess(img_crop, load_size=224)
 
             with torch.no_grad():
+                """TODO: Integration of SD DINO"""
                 desc = self.extractor.extract_descriptors(img_prep.to(self.device), layer=11, facet='key', bin=False, include_cls=True)
                 desc = desc.squeeze(0).squeeze(0).detach().cpu()
 
