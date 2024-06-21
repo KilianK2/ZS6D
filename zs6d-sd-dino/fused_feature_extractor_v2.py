@@ -103,16 +103,16 @@ def compute_pair_feature(model, aug, save_path, files, category, mask=False, dis
             else: # CO_PCA = True
                 if not ONLY_DINO: # ONLY_DINO = False
                     features1 = process_features_and_mask(model, aug, img1_input, input_text=input_text, mask=False,
-                                                          raw=True)
+                                                          raw=True) # sd
                     features2 = process_features_and_mask(model, aug, img2_input, input_text=input_text, mask=False,
-                                                          raw=True)
+                                                          raw=True) # sd
                     processed_features1, processed_features2 = co_pca(features1, features2, PCA_DIMS)
                     img1_desc = processed_features1.reshape(1, 1, -1, num_patches ** 2).permute(0, 1, 3, 2)
                     img2_desc = processed_features2.reshape(1, 1, -1, num_patches ** 2).permute(0, 1, 3, 2)
                 if FUSE_DINO:
-                    img1_batch = extractor.preprocess_pil(img1)
-                    img1_desc_dino = extractor.extract_descriptors(img1_batch.to(device), layer, facet)
-                    img2_batch = extractor.preprocess_pil(img2)
+                    img1_batch = extractor.preprocess_pil(img1) # dino
+                    img1_desc_dino = extractor.extract_descriptors(img1_batch.to(device), layer, facet) # dino
+                    img2_batch = extractor.preprocess_pil(img2) # dino
                     img2_desc_dino = extractor.extract_descriptors(img2_batch.to(device), layer, facet)
 
             if dist == 'l1' or dist == 'l2': # When FUSE_DINO = True
@@ -125,16 +125,16 @@ def compute_pair_feature(model, aug, save_path, files, category, mask=False, dis
 
             if FUSE_DINO and not ONLY_DINO:
                 # cat two features together
-                img1_desc = torch.cat((img1_desc, img1_desc_dino), dim=-1)
-                img2_desc = torch.cat((img2_desc, img2_desc_dino), dim=-1)
+                img1_desc = torch.cat((img1_desc, img1_desc_dino), dim=-1) # Fusion of SD DINO
+                img2_desc = torch.cat((img2_desc, img2_desc_dino), dim=-1) # Fusion of SD DINO
 
             if ONLY_DINO:
                 pass
 
             if DRAW_DENSE:
                 if not Anno:
-                    mask1 = get_mask(model, aug, img1, category[0])
-                    mask2 = get_mask(model, aug, img2, category[-1])
+                    mask1 = get_mask(model, aug, img1, category[0]) # sd
+                    mask2 = get_mask(model, aug, img2, category[-1]) # sd
                 if Anno:
                     mask1 = torch.Tensor(
                         resize(img1, img_size, resize=True, to_pil=False, edge=EDGE_PAD).mean(-1) > 0).to(device)
@@ -142,9 +142,9 @@ def compute_pair_feature(model, aug, save_path, files, category, mask=False, dis
                         resize(img2, img_size, resize=True, to_pil=False, edge=EDGE_PAD).mean(-1) > 0).to(device)
                     print(mask1.shape, mask2.shape, mask1.sum(), mask2.sum())
                 if ONLY_DINO or not FUSE_DINO:
-                    img1_desc = img1_desc / img1_desc.norm(dim=-1, keepdim=True)
-                    img2_desc = img2_desc / img2_desc.norm(dim=-1, keepdim=True)
+                    pass
 
+                # Reshaping of SD DINO
                 img1_desc_reshaped = img1_desc.permute(0, 1, 3, 2).reshape(-1, img1_desc.shape[-1], num_patches,
                                                                            num_patches)
                 img2_desc_reshaped = img2_desc.permute(0, 1, 3, 2).reshape(-1, img2_desc.shape[-1], num_patches,
@@ -168,8 +168,7 @@ def compute_pair_feature(model, aug, save_path, files, category, mask=False, dis
                     mask2 = get_mask(model, aug, img2, category[-1])
 
                 if (ONLY_DINO or not FUSE_DINO) and not DRAW_DENSE:
-                    img1_desc = img1_desc / img1_desc.norm(dim=-1, keepdim=True)
-                    img2_desc = img2_desc / img2_desc.norm(dim=-1, keepdim=True)
+                    pass
 
                 img1_desc_reshaped = img1_desc.permute(0, 1, 3, 2).reshape(-1, img1_desc.shape[-1], num_patches,
                                                                            num_patches)
