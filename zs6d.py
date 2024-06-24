@@ -13,7 +13,7 @@ from fused_feature_extractor_v3 import FusedPoseViTExtractor
 
 class ZS6D:
 
-    def __init__(self, templates_gt_path, norm_factors_path, model_type='dino_vits8', stride=4, subset_templates=1, max_crop_size=80):
+    def __init__(self, templates_gt_path, norm_factors_path, model_type='dino_vits8', stride=4, subset_templates=8, max_crop_size=80):
         # Set up logging
         self.logger = logging.getLogger(self.__class__.__name__)
         logging.basicConfig(level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -37,7 +37,7 @@ class ZS6D:
 
         self.extractor = PoseViTExtractor(model_type=self.model_type, stride=self.stride, device=self.device)
         """TODO: Utilizing FusedFeatureExtractor"""
-        self.extractor = FusedPoseViTExtractor(model_type=self.model_type, stride=self.stride, device=self.device)
+        #self.extractor = FusedPoseViTExtractor(model_type=self.model_type, stride=self.stride, device=self.device)
 
         self.templates_desc = {}
         templates_gt_subset = {}

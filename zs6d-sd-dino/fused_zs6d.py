@@ -9,7 +9,8 @@ import cv2
 import pose_utils.utils as utils
 import logging
 from src.pose_extractor import PoseViTExtractor
-from fused_feature_extractor_v3 import FusedPoseViTExtractor
+from extractor_sd import load_model, process_features_and_mask, get_mask
+from utils.utils_correspondence import co_pca, resize, find_nearest_patchs, find_nearest_patchs_replace
 
 
 class Fused_ZS6D:
@@ -60,35 +61,41 @@ class Fused_ZS6D:
 
         self.logger.info("Preparing templates and loading of extractor is done!")
 
-    def get_pose(self, img, obj_id, mask, cam_K, bbox=None):
+
+    def get_pose(self, model, aug, stride, img, obj_id, mask, cam_K, bbox=None):
         try:
             if bbox is None:
                 bbox = img_utils.get_bounding_box_from_mask(mask)
 
+            """TODO: Preprocessing of Image"""
             img_crop, y_offset, x_offset = img_utils.make_quadratic_crop(np.array(img), bbox)
             mask_crop, _, _ = img_utils.make_quadratic_crop(mask, bbox)
             img_crop = cv2.bitwise_and(img_crop, img_crop, mask=mask_crop)
             img_crop = Image.fromarray(img_crop)
             img_prep, _, _ = self.extractor.preprocess(img_crop, load_size=224)
 
+            """Setup SD-DINO"""
+            patch_size = self.extractor.model.patch_embed.patch_size[0]
+            num_patches = int(patch_size / stride * (224 // patch_size - 1) + 1)
+            img_resized = resize(img, real_size=960, resize=True, to_pil=True, edge=False)
 
             """TODO: Integration of SD DINO"""
-            features_sd = process_features_and_mask(model, aug, img1_input, input_text=input_text, mask=False,
-                                                  raw=True)  # sd
-            desc_sd = features_sd.reshape(1, 1, -1, num_patches ** 2).permute(0, 1, 3, 2)
-
-
             with torch.no_grad():
+                """SD Features"""
+                # img = image that i want to analyse
 
-                img_batch = self.extractor.preprocess(img_prep, load_size=224)
+                features_sd = process_features_and_mask(model, aug, img_resized, input_text=None, mask=False,
+                                                        raw=True)  # sd
+                desc_sd = features_sd.reshape(1, 1, -1, num_patches ** 2).permute(0, 1, 3, 2)
 
+                """DINO Features"""
                 desc_dino = self.extractor.extract_descriptors(img_prep.to(self.device), layer=11, facet='key', bin=False,
                                                           include_cls=True)
 
+                """Fused SD-DINO Features"""
                 desc_sd_dino = torch.cat((desc_sd, desc_dino), dim=-1)  # Fusion of SD DINO
                 desc = desc_sd_dino.squeeze(0).squeeze(0).detach().cpu()
 
-            """-----"""
             matched_templates = utils.find_template_cpu(desc, self.templates_desc[obj_id], num_results=1)
 
             if not matched_templates:
