@@ -2,6 +2,7 @@ import torch
 from torch import nn
 from torchvision import transforms
 import src.extractor as extractor
+#import extractor_dino as extractor
 from PIL import Image
 from typing import Union, List, Tuple
 from src.correspondences import chunk_cosine_sim

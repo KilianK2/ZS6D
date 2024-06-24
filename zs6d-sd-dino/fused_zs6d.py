@@ -9,8 +9,8 @@ import cv2
 import pose_utils.utils as utils
 import logging
 from src.pose_extractor import PoseViTExtractor
-from extractor_sd import load_model, process_features_and_mask, get_mask
-from utils.utils_correspondence import co_pca, resize, find_nearest_patchs, find_nearest_patchs_replace
+from extractor_sd import process_features_and_mask
+from utils.utils_correspondence import resize
 
 
 class Fused_ZS6D:
@@ -39,8 +39,6 @@ class Fused_ZS6D:
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
         self.extractor = PoseViTExtractor(model_type=self.model_type, stride=self.stride, device=self.device)
-        """TODO: Utilizing FusedFeatureExtractor"""
-        #self.extractor = FusedPoseViTExtractor(model_type=self.model_type, stride=self.stride, device=self.device)
 
         self.templates_desc = {}
         templates_gt_subset = {}

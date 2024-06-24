@@ -9,7 +9,6 @@ import cv2
 import pose_utils.utils as utils
 import logging
 from src.pose_extractor import PoseViTExtractor
-from fused_feature_extractor_v3 import FusedPoseViTExtractor
 
 class ZS6D:
 
