@@ -15,7 +15,7 @@ from utils.utils_correspondence import resize
 
 class Fused_ZS6D:
 
-    def __init__(self, templates_gt_path, norm_factors_path, model_type='dino_vits8', stride=4, subset_templates=1,
+    def __init__(self, templates_gt_path, norm_factors_path, model_type='dino_vits8', stride=4, subset_templates=10,
                  max_crop_size=80):
         # Set up logging
         self.logger = logging.getLogger(self.__class__.__name__)
