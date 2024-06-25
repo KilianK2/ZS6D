@@ -11,6 +11,7 @@ import logging
 from src.pose_extractor import PoseViTExtractor
 from extractor_sd import process_features_and_mask
 from utils.utils_correspondence import resize
+import torch.nn.functional as F
 
 
 class Fused_ZS6D:
@@ -73,22 +74,27 @@ class Fused_ZS6D:
             img_prep, _, _ = self.extractor.preprocess(img_crop, load_size=224)
 
             """Setup SD-DINO"""
-            patch_size = self.extractor.model.patch_embed.patch_size[0]
+            patch_size = self.extractor.model.patch_embed.patch_size
             num_patches = int(patch_size / stride * (224 // patch_size - 1) + 1)
-            img_resized = resize(img, real_size=960, resize=True, to_pil=True, edge=False)
+            real_size = 960
+            img_resized = resize(img, real_size, resize=True, to_pil=True, edge=False)
 
             """TODO: Integration of SD DINO"""
             with torch.no_grad():
                 """SD Features"""
-                # img = image that i want to analyse
-
                 features_sd = process_features_and_mask(model, aug, img_resized, input_text=None, mask=False,
                                                         raw=True)  # sd
-                desc_sd = features_sd.reshape(1, 1, -1, num_patches ** 2).permute(0, 1, 3, 2)
+                dim = [256, 256, 256]
+                processed_features_sd = co_pca_single(features_sd, dim)
+                desc_sd = processed_features_sd.reshape(1, 1, -1, num_patches ** 2).permute(0, 1, 3, 2)
+                # normalize the features
+                desc_sd = desc_sd / desc_sd.norm(dim=-1, keepdim=True)
 
                 """DINO Features"""
                 desc_dino = self.extractor.extract_descriptors(img_prep.to(self.device), layer=11, facet='key', bin=False,
                                                           include_cls=True)
+                # normalize the features
+                desc_dino = desc_dino / desc_dino.norm(dim=-1, keepdim=True)
 
                 """Fused SD-DINO Features"""
                 desc_sd_dino = torch.cat((desc_sd, desc_dino), dim=-1)  # Fusion of SD DINO
@@ -133,3 +139,72 @@ class Fused_ZS6D:
         except Exception as e:
             self.logger.error(f"Error in get_pose: {e}")
             raise
+
+
+def co_pca_single(features_sd, dim):
+    processed_features = {}
+
+    s5_size = features_sd['s5'].shape[-1]
+    s4_size = features_sd['s4'].shape[-1]
+    s3_size = features_sd['s3'].shape[-1]
+    # Get the feature tensors
+    s5_1 = features_sd['s5'].reshape(features_sd['s5'].shape[0], features_sd['s5'].shape[1], -1)
+    s4_1 = features_sd['s4'].reshape(features_sd['s4'].shape[0], features_sd['s4'].shape[1], -1)
+    s3_1 = features_sd['s3'].reshape(features_sd['s3'].shape[0], features_sd['s3'].shape[1], -1)
+
+    # Define the target dimensions
+    target_dims = {'s5': dim[0], 's4': dim[1], 's3': dim[2]}
+
+    # Compute the PCA
+    for name, tensor in zip(['s5', 's4', 's3'], [s5_1, s4_1, s3_1]):
+        target_dim = target_dims[name]
+
+        features = tensor.permute(0, 2, 1)  # Bx(t_x+t_y)x(d)
+
+        # Compute the PCA
+        # pca = faiss.PCAMatrix(features.shape[-1], target_dim)
+
+        # Train the PCA
+        # pca.train(features[0].cpu().numpy())
+
+        # Apply the PCA
+        # features = pca.apply(features[0].cpu().numpy()) # (t_x+t_y)x(d)
+
+        # convert to tensor
+        # features = torch.tensor(features, device=features1['s5'].device).unsqueeze(0).permute(0, 2, 1) # Bx(d)x(t_x+t_y)
+
+        # equivalent to the above, pytorch implementation
+        mean = torch.mean(features[0], dim=0, keepdim=True)
+        centered_features = features[0] - mean
+        U, S, V = torch.pca_lowrank(centered_features, q=target_dim)
+        reduced_features = torch.matmul(centered_features, V[:, :target_dim])  # (t_x+t_y)x(d)
+        features = reduced_features.unsqueeze(0).permute(0, 2, 1)  # Bx(d)x(t_x+t_y)
+
+
+        processed_features[name] = features
+    # reshape the features
+    processed_features['s5'] = processed_features['s5'].reshape(processed_features['s5'].shape[0], -1, s5_size,
+                                                                  s5_size)
+    processed_features['s4'] = processed_features['s4'].reshape(processed_features['s4'].shape[0], -1, s4_size,
+                                                                  s4_size)
+    processed_features['s3'] = processed_features['s3'].reshape(processed_features['s3'].shape[0], -1, s3_size,
+                                                                  s3_size)
+
+    # Upsample s5 spatially by a factor of 2
+    processed_features['s5'] = F.interpolate(processed_features['s5'], size=(processed_features['s4'].shape[-2:]),
+                                             mode='bilinear', align_corners=False)
+
+    # Concatenate upsampled_s5 and s4 to create a new s5
+    processed_features['s5'] = torch.cat([processed_features['s4'], processed_features['s5']], dim=1)
+
+    # Set s3 as the new s4
+    processed_features['s4'] = processed_features['s3']
+
+    # Remove s3 from the features dictionary
+    processed_features.pop('s3')
+
+    # Current order are layer 8, 5, 2
+    features_gether_s4_s5 = torch.cat([processed_features['s4'], F.interpolate(processed_features['s5'], size=(
+    processed_features['s4'].shape[-2:]), mode='bilinear')], dim=1)
+
+    return features_gether_s4_s5
