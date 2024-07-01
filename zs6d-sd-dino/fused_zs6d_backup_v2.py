@@ -66,27 +66,41 @@ class Fused_ZS6D:
             if bbox is None:
                 bbox = img_utils.get_bounding_box_from_mask(mask)
 
-            """Setup DINO"""
+            """TODO: Preprocessing of Image"""
+            """PREPROCESSING IMAGE FOR DINO"""
             img_crop, y_offset, x_offset = img_utils.make_quadratic_crop(np.array(img), bbox)
             mask_crop, _, _ = img_utils.make_quadratic_crop(mask, bbox)
             img_crop = cv2.bitwise_and(img_crop, img_crop, mask=mask_crop)
             img_crop = Image.fromarray(img_crop)
-            img_prep, _, _ = self.extractor.preprocess(img_crop, load_size=448)
-
-            """Setup SD"""
-            img_sd = resize(img, target_res = 448, resize=True, to_pil=True, edge=False)
+            img_prep, _, _ = self.extractor.preprocess(img_crop, load_size=840)
+            ## Setup
+            # img_size = 840 or 244 (if not DINOV2)
+            #img_base = Image.open(files[2 * pair_idx]).convert('RGB')
+            #img_dino = resize(img_base, img_size, resize=True, to_pil=True, edge=EDGE_PAD)
+            """Setup SD-DINO"""
             patch_size = self.extractor.model.patch_embed.patch_size[0]
-            num_patches = int(patch_size / stride * (448 // patch_size - 1) + 1)
+            num_patches = int(patch_size / stride * (840 // patch_size - 1) + 1)
+            real_size = 960
+            img_sd = resize(img, real_size, resize=True, to_pil=True, edge=False)
 
+            """PREPROCESSING IMAGE FOR SD"""
+            # real_size = 960
+            #img_sd = resize(img_base, real_size, resize=True, to_pil=True, edge=EDGE_PAD)
+
+
+            """TODO: Integration of SD DINO"""
             with torch.no_grad():
 
                 """SD Features"""
                 features_sd = process_features_and_mask(model, aug, img_sd, input_text=None, mask=False,
-                                                        raw=True)
+                                                        raw=True)  # sd
+                #dim = [256, 256, 256]
                 processed_features_sd = single_pca(features_sd)
                 desc_sd = processed_features_sd.reshape(1, 1, -1, num_patches ** 2).permute(0, 1, 3, 2)
 
                 """DINO Features"""
+                # What is img_prep ???
+                # img_prep = self.extractor.preprocess_pil(img_dino)
                 desc_dino = self.extractor.extract_descriptors(img_prep.to(self.device), layer=11, facet='key', bin=False,
                                                           include_cls=True)
 
@@ -95,10 +109,10 @@ class Fused_ZS6D:
                 desc_dino = desc_dino / desc_dino.norm(dim=-1, keepdim=True)
 
                 """Fused SD-DINO Features"""
-                desc_sd_dino = torch.cat((desc_sd, desc_dino), dim=-1)
-                desc_fused = desc_sd_dino.squeeze(0).squeeze(0).detach().cpu()
+                desc_sd_dino = torch.cat((desc_sd, desc_dino), dim=-1)  # Fusion of SD DINO
+                desc = desc_sd_dino.squeeze(0).squeeze(0).detach().cpu()
 
-            matched_templates = utils.find_template_cpu(desc_fused, self.templates_desc[obj_id], num_results=1)
+            matched_templates = utils.find_template_cpu(desc, self.templates_desc[obj_id], num_results=1)
 
             if not matched_templates:
                 raise ValueError("No matched templates found for the object.")
@@ -139,10 +153,7 @@ class Fused_ZS6D:
             raise
 
 
-def single_pca(features, dim=None):
-    if dim is None:
-        dim = [256, 256, 256]
-
+def single_pca(features, dim=[256, 256, 256]):
     processed_features = {}
     s5_size = features['s5'].shape[-1]
     s4_size = features['s4'].shape[-1]
