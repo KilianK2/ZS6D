@@ -21,7 +21,6 @@ class Fused_ZS6D:
         # Set up logging
         self.logger = logging.getLogger(self.__class__.__name__)
         logging.basicConfig(level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
-
         self.model_type = model_type
         self.stride = stride
         self.subset_templates = subset_templates

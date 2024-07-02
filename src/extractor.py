@@ -35,10 +35,13 @@ class ViTExtractor:
         """
         self.model_type = model_type
         self.device = device
+        print(self.model_type + " A")
         if model is not None:
             self.model = model
         else:
             self.model = ViTExtractor.create_model(model_type)
+
+        print(self.model_type + " B")
 
         self.model = ViTExtractor.patch_vit_resolution(self.model, stride=stride)
         self.model.eval()
@@ -62,10 +65,11 @@ class ViTExtractor:
                            vit_base_patch16_224]
         :return: the model
         """
-        if 'dino' in model_type:
+        torch.hub._validate_not_a_forked_repo = lambda a, b, c: True
+        if 'v2' in model_type:
+            model = torch.hub.load('facebookresearch/dinov2', model_type)
+        elif 'dino' in model_type:
             model = torch.hub.load('facebookresearch/dino:main', model_type)
-            
-            # model = torch.hub.load('facebookresearch/dinov2', 'dinov2_vits14')
         else:  # model from timm -- load weights from timm to dino model (enables working on arbitrary size images).
             temp_model = timm.create_model(model_type, pretrained=True)
             model_type_dict = {
