@@ -17,6 +17,7 @@ from rendering.utils import get_rendering, get_sympose
 from zs6d_sd_dino.sd_dino.extractor_sd import load_model
 #from fused_zs6d import Fused_ZS6D
 from zs6d_sd_dino.fused_zs6d import Fused_ZS6D
+from zs6d_sd_dino.fused_feature_extractor import get_fused_features
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Test pose estimation inference on test set')
@@ -65,7 +66,7 @@ if __name__ == "__main__":
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
     """Setup for Fused_ZS6D"""
-    extractor = Fused_ZS6D(model_type='dinov2_vitb14', stride=14, device=device)
+    extractor = PoseViTExtractor(model_type='dinov2_vitb14', stride=14, device=device)
 
     VER = "v1-5"
     TIMESTEP = 100
@@ -129,7 +130,7 @@ if __name__ == "__main__":
                     #desc = extractor.extract_descriptors(img_prep.to(device), layer=11, facet='key', bin=False,
                     #                                  include_cls=True)
 
-                    desc = extractor.get_fused_features(model, aug, img)
+                    desc = get_fused_features(model, aug, img)
                     desc_sd_dino = desc.squeeze(0).squeeze(0).detach().cpu().numpy()
 
                     R = obj_poses[i][:3, :3]

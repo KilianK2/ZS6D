@@ -18,11 +18,11 @@ import numpy as np
 from PIL import Image
 from tqdm import tqdm
 import torch.nn.functional as F
-from extractor_sd import load_model, process_features_and_mask, get_mask
-from utils.utils_correspondence import co_pca, resize, find_nearest_patchs, find_nearest_patchs_replace
+from zs6d_sd_dino.sd_dino.extractor_sd import load_model, process_features_and_mask, get_mask
+from zs6d_sd_dino.sd_dino.utils.utils_correspondence import co_pca, resize, find_nearest_patchs, find_nearest_patchs_replace
 import matplotlib.pyplot as plt
 import sys
-from extractor_dino import ViTExtractor
+from zs6d_sd_dino.sd_dino.extractor_dino import ViTExtractor
 from sklearn.decomposition import PCA as sklearnPCA
 import math
 from sklearn.cluster import KMeans
