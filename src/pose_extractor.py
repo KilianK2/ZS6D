@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 from torchvision import transforms
-import src.extractor as extractor
+#import src.extractor as extractor
 #import extractor_dino as extractor
 from PIL import Image
 from typing import Union, List, Tuple
@@ -10,8 +10,7 @@ from sklearn.cluster import KMeans
 import numpy as np
 import time
 from external.kmeans_pytorch.kmeans_pytorch import kmeans
-
-
+import zs6d_sd_dino.sd_dino.extractor_dino as extractor
 
 
 class PoseViTExtractor(extractor.ViTExtractor):

@@ -66,11 +66,17 @@ class ZS6D:
             img_crop = cv2.bitwise_and(img_crop, img_crop, mask=mask_crop)
             img_crop = Image.fromarray(img_crop)
             img_prep, _, _ = self.extractor.preprocess(img_crop, load_size=224)
+            print(f"Shape of img_prep: {img_prep.shape}")
+
 
             with torch.no_grad():
                 """TODO: Integration of SD DINO"""
                 desc = self.extractor.extract_descriptors(img_prep.to(self.device), layer=11, facet='key', bin=False, include_cls=True)
+                print(f"Shape of desc: {desc.shape}")
+
                 desc = desc.squeeze(0).squeeze(0).detach().cpu()
+                print(f"Shape of desc after squeeze: {desc.shape}")
+                print(f"Shape of self.templates_desc[obj_id] : {self.templates_desc[obj_id].shape}")
 
             matched_templates = utils.find_template_cpu(desc, self.templates_desc[obj_id], num_results=1)
 

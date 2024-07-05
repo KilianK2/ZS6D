@@ -35,6 +35,14 @@ def find_template(desc_input, desc_templates, num_results):
 
 
 def find_template_cpu(desc_input, desc_templates, num_results):
+    # In find_template_cpu function (utils.py)
+    print(f"Shape of desc_input: {desc_input.shape}")
+    print(f"Shape of desc_templates: {desc_templates.shape}")
+    desc_input_flat = desc_input.reshape(-1)
+    templates_flat = [template.reshape(-1) for template in desc_templates]
+    print(f"Shape of desc_input_flat: {desc_input_flat.shape}")
+    print(f"Shape of first template_flat: {templates_flat[0].shape}")
+
     # Flatten and normalize the desc_input
     desc_input_flat = desc_input.ravel()
     desc_input_norm = np.linalg.norm(desc_input_flat)

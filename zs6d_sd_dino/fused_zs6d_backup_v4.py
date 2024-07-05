@@ -73,19 +73,16 @@ class Fused_ZS6D:
             img_prep, _, _ = self.extractor.preprocess(img_crop, load_size=448)
 
             """Setup SD"""
-            img_sd = resize(img, target_res = 448, resize=True, to_pil=True, edge=False)
+            img_sd = resize(img, target_res = 960, resize=True, to_pil=True, edge=False)
             patch_size = self.extractor.model.patch_embed.patch_size[0]
             num_patches = int(patch_size / stride * (448 // patch_size - 1) + 1)
 
             with torch.no_grad():
 
-                """SD Features"""
-                features_sd = process_features_and_mask(model, aug, img_sd, input_text=None, mask=False,
-                                                        raw=True)
-                processed_features_sd = single_pca(features_sd)
-                desc_sd = processed_features_sd.reshape(1, 1, -1, num_patches ** 2).permute(0, 1, 3, 2)
-
-                """DINO Features"""
+                """SD Descriptors"""
+                desc_sd = process_features_and_mask(model, aug, img_sd, input_text=None, mask=False,
+                                                        pca=True).reshape(1,1,-1, num_patches**2).permute(0,1,3,2)
+                """DINO Descriptors"""
                 desc_dino = self.extractor.extract_descriptors(img_prep.to(self.device), layer=11, facet='key', bin=False,
                                                           include_cls=True)
 
@@ -194,4 +191,3 @@ def single_pca(features, dim=None):
     processed_features['s4'].shape[-2:]), mode='bilinear')], dim=1)
 
     return features_gather_s4_s5
-
