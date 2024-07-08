@@ -2,6 +2,6 @@
 <project version="4">
   <component name="VcsDirectoryMappings">
     <mapping directory="" vcs="Git" />
-    <mapping directory="$PROJECT_DIR$/zs6d-sd-dino/sd-dino" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/zs6d_sd_dino/sd_dino" vcs="Git" />
   </component>
 </project>

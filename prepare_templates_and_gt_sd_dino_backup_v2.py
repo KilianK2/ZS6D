@@ -15,7 +15,6 @@ from pose_utils import img_utils
 from rendering.utils import get_rendering, get_sympose
 #from extractor_sd import load_model
 from zs6d_sd_dino.sd_dino.extractor_sd import load_model
-from zs6d_sd_dino.sd_dino.extractor_sd import process_features_and_mask
 #from fused_zs6d import Fused_ZS6D
 from zs6d_sd_dino.fused_zs6d import Fused_ZS6D
 from zs6d_sd_dino.fused_feature_extractor import get_fused_features
@@ -75,22 +74,22 @@ if __name__ == "__main__":
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
     """Setup for Fused_ZS6D"""
-    stride = 14
-    extractor = PoseViTExtractor(model_type='dinov2_vitb14', stride=stride, device=device)
-    extractor_dino = ViTExtractor(model_type='dinov2_vitb14', stride=stride, device=device)
-    image_size_sd = 960
-    image_size_dino = 840
+    extractor = PoseViTExtractor(model_type='dinov2_vitb14', stride=14, device=device)
+
+    VER = "v1-5"
+    TIMESTEP = 100
+    img_size_sd = 960
+
+    model, aug = load_model(diffusion_ver=VER, image_size=img_size_sd, num_timesteps=TIMESTEP)
+    PCA = True
+    img_size = 224  # # used to be 840 # if DINOV2 else 244
+    model_type = 'dinov2_vitb14'
     layer = 11
     facet = 'token'
-    model, aug = load_model(diffusion_ver="v1-5", image_size=image_size_sd, num_timesteps=100)
-    patch_size = extractor_dino.model.patch_embed.patch_size[0]
-    #img_size = extractor.model.patch_embed.img_size
-    #num_patches = int(patch_size / stride * (image_size_dino // patch_size - 1) + 1)
-    num_patches = int(patch_size / stride * (image_size_dino // patch_size))
+    stride = 14
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-
-    #num_patches_sd = int(patch_size / stride * (image_size_sd // patch_size - 1) + 1)
-
+    extractor_sd_dino = ViTExtractor(model_type, stride, device=device)
 
     cam_K = np.array(config['cam_K']).reshape((3, 3))
 
@@ -133,7 +132,6 @@ if __name__ == "__main__":
 
                 for i, file in enumerate(filtered_files):
 
-                    # Preparing mask and bounding box [x,y,w,h]
                     mask_path = os.path.join(path_template_folder, f"mask_{file}")
                     mask = cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE)
                     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -141,52 +139,20 @@ if __name__ == "__main__":
                     crop_size = max(w, h)
 
                     # Preparing cropped image and desc
-                    img = cv2.imread(os.path.join(path_template_folder, file))
+                    img_base = cv2.imread(os.path.join(path_template_folder, file))
+                    img = cv2.cvtColor(img_base, cv2.COLOR_BGR2RGB)
 
-                    img_base = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+                    img_crop, crop_x, crop_y = img_utils.make_quadratic_crop(img, [x, y, w, h])
+                    img_crop = Image.fromarray(img_crop)
 
+                    img_prep_dino, img_crop_dino, _ = extractor.preprocess(img_crop, load_size=224)
 
+                    #img_crop_pil = Image.fromarray(img_crop)
+                    #img_prep, img_crop_pil, _ = extractor.preprocess(img_crop_pil, load_size=224)
 
-                    img_crop_raw, crop_x, crop_y = img_utils.make_quadratic_crop(img_base, [x, y, w, h])
-                    img_prep, img_crop, _ = extractor.preprocess(Image.fromarray(img_crop_raw), load_size=image_size_dino)
+                    img_prep_sd = resize(img_base, img_size_sd, resize=True, to_pil=True, edge=False)
 
-                    """SD-DINO"""
-                    img_base = Image.fromarray(img).convert('RGB')
-
-                    # Resizing
-                    img_sd = resize(img_base, image_size_sd, resize=True, to_pil=True, edge=False)
-                    img_dino = resize(img_base, image_size_dino, resize=True, to_pil=True, edge=False)
-
-                    # Stable Diffusion
-                    desc_sd = process_features_and_mask(model, aug, img_sd, input_text=None, mask=False, pca=True).reshape(1,1,-1, num_patches**2).permute(0,1,3,2)
-                    print(f"Shape of SD features: {desc_sd.shape}")
-
-                    # DinoV2
-                    img_dino_batch = extractor_dino.preprocess_pil(img_dino)
-                    desc_dino = extractor_dino.extract_descriptors(img_dino_batch.to(device), layer, facet)
-                    print(f"Shape of DINO features: {desc_dino.shape}")
-                    # adjusted for dinov2
-                    #desc_dino = extractor.extract_descriptors(img_prep.to(device), layer=11, facet='token', bin=False,
-                     #                                    include_cls=True)
-
-                    #img_base_sd = Image.fromarray(img_crop_raw)
-                    #img_prep_sd = resize(img_base_sd, image_size_sd, resize=True, to_pil=True, edge=False)
-
-                    #desc_sd = process_features_and_mask(model, aug, img_prep_sd, input_text=None, mask=False,
-                    #                          pca=True).reshape(1, 1, -1, num_patches ** 2).permute(0, 1, 3, 2)
-
-                    #desc_sd = torch.nn.functional.interpolate(desc_sd, size=(num_patches, num_patches), mode='bilinear',
-                    #                                          align_corners=False)
-
-                    # normalization
-                    desc_dino = desc_dino / desc_dino.norm(dim=-1, keepdim=True)
-                    desc_sd = desc_sd / desc_sd.norm(dim=-1, keepdim=True)
-
-                    # fusion
-                    desc_sd_dino = torch.cat((desc_sd, desc_dino), dim=-1)
-                    print(f"Shape of SD-DINO features: {desc_sd_dino.shape}")
-
-
+                    desc_sd_dino = get_fused_features(extractor_sd_dino, model, aug, img_prep_dino, img_prep_sd)
                     desc_sd_dino = desc_sd_dino.squeeze(0).squeeze(0).detach().cpu().numpy()
 
                     R = obj_poses[i][:3, :3]
@@ -229,12 +195,9 @@ if __name__ == "__main__":
                     # Saving all template crops and descriptors:
                     np.save(tmp_dict['uv_crop'], img_uv)
                     np.save(tmp_dict['img_desc'], desc_sd_dino)
-                    img_crop.save(tmp_dict['img_crop'])
+                    img_crop_dino.save(tmp_dict['img_crop'])
 
                 template_labels_gt[str(obj_id)] = tmp_list
 
     with open(config['output_template_gt_file'], 'w') as f:
         json.dump(template_labels_gt, f)
-
-
-
