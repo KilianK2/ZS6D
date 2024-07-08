@@ -62,10 +62,11 @@ class ViTExtractor:
                            vit_base_patch16_224]
         :return: the model
         """
-        if 'dino' in model_type:
+        torch.hub._validate_not_a_forked_repo = lambda a, b, c: True
+        if 'v2' in model_type:
+            model = torch.hub.load('facebookresearch/dinov2', model_type)
+        elif 'dino' in model_type:
             model = torch.hub.load('facebookresearch/dino:main', model_type)
-            
-            # model = torch.hub.load('facebookresearch/dinov2', 'dinov2_vits14')
         else:  # model from timm -- load weights from timm to dino model (enables working on arbitrary size images).
             temp_model = timm.create_model(model_type, pretrained=True)
             model_type_dict = {
@@ -80,6 +81,7 @@ class ViTExtractor:
             del temp_state_dict['head.bias']
             model.load_state_dict(temp_state_dict)
         return model
+
 
     @staticmethod
     def _fix_pos_enc(patch_size: int, stride_hw: Tuple[int, int]):
