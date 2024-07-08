@@ -163,8 +163,8 @@ if __name__ == "__main__":
                     print(f"Shape of SD features: {desc_sd.shape}")
 
                     # DinoV2
-                    img_dino_batch = extractor_dino.preprocess_pil(img_dino)
-                    desc_dino = extractor_dino.extract_descriptors(img_dino_batch.to(device), layer, facet)
+                    img_dino_batch = extractor.preprocess_pil(img_dino)
+                    desc_dino = extractor.extract_descriptors(img_dino_batch.to(device), layer, facet)
                     print(f"Shape of DINO features: {desc_dino.shape}")
                     # adjusted for dinov2
                     #desc_dino = extractor.extract_descriptors(img_prep.to(device), layer=11, facet='token', bin=False,
