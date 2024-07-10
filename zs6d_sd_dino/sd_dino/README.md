@@ -54,12 +54,12 @@ NeurIPS, 2023.
 To install the required dependencies, use the following commands:
 
 ```bash
-conda create -n sd-dino python=3.9
-conda activate sd-dino
+conda create -n sd_dino python=3.9
+conda activate sd_dino
 conda install pytorch=1.13.1 torchvision=0.14.1 pytorch-cuda=11.6 -c pytorch -c nvidia
 conda install -c "nvidia/label/cuda-11.6.1" libcusolver-dev
-git clone git@github.com:Junyi42/sd-dino.git 
-cd sd-dino
+git clone git@github.com:Junyi42/sd_dino.git 
+cd sd_dino
 pip install -e .
 ```
 (Optional) You may also want to install [xformers](https://github.com/facebookresearch/xformers) for efficient transformer implementation:
