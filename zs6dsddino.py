@@ -80,7 +80,6 @@ class ZS6DSdDino:
             mask_crop, _, _ = img_utils.make_quadratic_crop(mask, bbox)
             img_crop = cv2.bitwise_and(img_crop, img_crop, mask=mask_crop)
             img_crop = Image.fromarray(img_crop)
-            #img_crop = resize(img_crop, self.image_size_dino, to_pil=True, edge=False)
             img_prep, _, _ = self.extractor.preprocess(img_crop, load_size=self.image_size_dino)
 
 
@@ -130,11 +129,14 @@ class ZS6DSdDino:
                 resize_factor = float(crop_size) / img_crop.size[0] #rezise_factor = 1.0
 
                 #img_crop = Image.fromarray(img_prep.squeeze().cpu().numpy())
+
+                """TODO: Check if input for kmeans is correct. What about crop_size? load_size = crop_size"""
                 input_image = img_base
                 input_pil = img_prep
                 template_image = template
                 template_pil, _, _ = self.extractor.preprocess(template_image, load_size=self.image_size_dino)
 
+                # v7 and v6 are valid but wrong results
                 points1, points2, crop_pil, template_pil = self.extractor.find_correspondences_fastkmeans_sd_dino_v7(self.image_size_sd, self.model_sd, self.aug_sd, num_patches, input_image, input_pil,
                                                                                                           template_image, template_pil,
                                                                                                           num_pairs=20,
@@ -152,6 +154,8 @@ class ZS6DSdDino:
                 img_uv = np.load(
                     f"{self.templates_gt[obj_id][matched_templates[0][1]]['img_crop'].split('.png')[0]}_uv.npy")
                 img_uv = img_uv.astype(np.uint8)
+
+                """TODO: Check if rezising is correct"""
                 img_uv = cv2.resize(img_uv, (self.image_size_dino, self.image_size_dino))
 
                 R_est, t_est = utils.get_pose_from_correspondences(points1, points2,

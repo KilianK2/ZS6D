@@ -1019,6 +1019,7 @@ class PoseViTExtractor(ViTExtractor):
 
         return points1, points2, input_pil, template_pil
 
+    # SD Dino without mask
     def find_correspondences_fastkmeans_sd_dino_v7(self, image_size_sd, model_sd, aug_sd, num_patches, input_image, input_pil, template_image, template_pil, num_pairs: int = 10, load_size: int = 840,
                                                 layer: int = 11, facet: str = 'token', bin: bool = False,
                                                 thresh: float = 0.05) -> Tuple[
