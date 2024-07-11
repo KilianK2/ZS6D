@@ -166,7 +166,7 @@ if __name__ == "__main__":
 
                         # Resizing
                         img_sd = resize(img_base, image_size_sd, resize=True, to_pil=True, edge=False)
-                        img_dino = resize(img_base, image_size_dino, resize=True, to_pil=True, edge=False)
+                        #img_dino = resize(img_base, image_size_dino, resize=True, to_pil=True, edge=False)
 
                         # Stable Diffusion
                         desc_sd = process_features_and_mask(model, aug, img_sd, input_text=None, mask=False,
@@ -175,8 +175,8 @@ if __name__ == "__main__":
                         print(f"Shape of SD features: {desc_sd.shape}")
 
                         # DinoV2
-                        img_dino_batch = extractor.preprocess_pil(img_dino)
-                        desc_dino = extractor.extract_descriptors(img_dino_batch.to(device), layer, facet)
+                        #img_dino_batch = extractor.preprocess_pil(img_dino)
+                        desc_dino = extractor.extract_descriptors(img_prep.to(device), layer, facet)
                         print(f"Shape of DINO features: {desc_dino.shape}")
 
                         # normalization

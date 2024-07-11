@@ -9,12 +9,15 @@ import cv2
 import pose_utils.utils as utils
 import logging
 from src.pose_extractor import PoseViTExtractor
+from zs6d_sd_dino.sd_dino.extractor_sd import process_features_and_mask
+from zs6d_sd_dino.sd_dino.utils.utils_correspondence import resize
+
 
 
 class ZS6DSdDino:
 
-    def __init__(self, templates_gt_path, norm_factors_path, model_type='dinov2_vitb14', stride=14, subset_templates=1,
-                 max_crop_size=80):
+    def __init__(self, model_sd, aug_sd, image_size_dino, image_size_sd, layer, facet, templates_gt_path, norm_factors_path, model_type='dinov2_vitb14', stride=14, subset_templates=1,
+                 max_crop_size=840):
         # Set up logging
         self.logger = logging.getLogger(self.__class__.__name__)
         logging.basicConfig(level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -23,6 +26,15 @@ class ZS6DSdDino:
         self.stride = stride
         self.subset_templates = subset_templates
         self.max_crop_size = max_crop_size
+
+        self.model_sd = model_sd
+        self.aug_sd = aug_sd
+        self.image_size_dino = image_size_dino
+        self.image_size_sd = image_size_sd
+        self.layer = layer
+        self.facet = facet
+        #self.patch_size = self.model.patch_embed.patch_size[0]
+        #self.num_patches = int(self.patch_size / self.stride * (image_size_dino // self.patch_size))
 
         try:
             with open(os.path.join(templates_gt_path), 'r') as f:
@@ -37,6 +49,8 @@ class ZS6DSdDino:
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
         self.extractor = PoseViTExtractor(model_type=self.model_type, stride=self.stride, device=self.device)
+
+
 
         self.templates_desc = {}
         templates_gt_subset = {}
@@ -57,7 +71,7 @@ class ZS6DSdDino:
 
         self.logger.info("Preparing templates and loading of extractor is done!")
 
-    def get_pose(self, img, obj_id, mask, cam_K, bbox=None):
+    def get_pose(self, num_patches, img, obj_id, mask, cam_K, bbox=None):
         try:
             if bbox is None:
                 bbox = img_utils.get_bounding_box_from_mask(mask)
@@ -66,14 +80,43 @@ class ZS6DSdDino:
             mask_crop, _, _ = img_utils.make_quadratic_crop(mask, bbox)
             img_crop = cv2.bitwise_and(img_crop, img_crop, mask=mask_crop)
             img_crop = Image.fromarray(img_crop)
-            img_prep, _, _ = self.extractor.preprocess(img_crop, load_size=224)
+            #img_crop = resize(img_crop, self.image_size_dino, to_pil=True, edge=False)
+            img_prep, _, _ = self.extractor.preprocess(img_crop, load_size=self.image_size_dino)
+
+
 
             with torch.no_grad():
-                desc = self.extractor.extract_descriptors(img_prep.to(self.device), layer=11, facet='key', bin=False,
-                                                          include_cls=True)
-                desc = desc.squeeze(0).squeeze(0).detach().cpu()
+                #desc = self.extractor.extract_descriptors(img_prep.to(self.device), layer=11, facet='key', bin=False,
+                #                                          include_cls=True)
+                """SD-DINO"""
+                img_base = img.convert('RGB')
 
-            matched_templates = utils.find_template_cpu(desc, self.templates_desc[obj_id], num_results=1)
+                # Resizing
+                img_sd = resize(img_base, self.image_size_sd, resize=True, to_pil=True, edge=False)
+                #img_dino = resize(img_base, self.image_size_dino, resize=True, to_pil=True, edge=False)
+
+                # Stable Diffusion
+                desc_sd = process_features_and_mask(self.model_sd, self.aug_sd, img_sd, input_text=None, mask=False, pca=True).reshape(
+                    1, 1, -1, num_patches ** 2).permute(0, 1, 3, 2)
+                print(f"Shape of SD features: {desc_sd.shape}")
+
+                # DinoV2
+                #img_dino_batch = self.extractor.preprocess_pil(img_dino)
+                desc_dino = self.extractor.extract_descriptors(img_prep.to(self.device), self.layer, self.facet)
+                print(f"Shape of DINO features: {desc_dino.shape}")
+
+
+                # normalization
+                desc_dino = desc_dino / desc_dino.norm(dim=-1, keepdim=True)
+                desc_sd = desc_sd / desc_sd.norm(dim=-1, keepdim=True)
+
+                # fusion
+                desc_sd_dino = torch.cat((desc_sd, desc_dino), dim=-1)
+                print(f"Shape of SD-DINO features: {desc_sd_dino.shape}")
+
+                desc_sd_dino = desc_sd_dino.squeeze(0).squeeze(0).detach().cpu()
+
+            matched_templates = utils.find_template_cpu(desc_sd_dino, self.templates_desc[obj_id], num_results=1) #found template
 
             if not matched_templates:
                 raise ValueError("No matched templates found for the object.")
@@ -82,16 +125,21 @@ class ZS6DSdDino:
 
             with torch.no_grad():
                 if img_crop.size[0] < self.max_crop_size:
-                    crop_size = img_crop.size[0]
+                    crop_size = img_crop.size[0] #crop_size = 184
                 else:
                     crop_size = self.max_crop_size
 
-                resize_factor = float(crop_size) / img_crop.size[0]
+                resize_factor = float(crop_size) / img_crop.size[0] #rezise_factor = 1.0
 
-                points1, points2, crop_pil, template_pil = self.extractor.find_correspondences_fastkmeans(img_crop,
+                points1, points2, crop_pil, template_pil = self.extractor.find_correspondences_fastkmeans_sd_dino(img_crop,
                                                                                                           template,
                                                                                                           num_pairs=20,
                                                                                                           load_size=crop_size)
+
+                #points1, points2, crop_pil, template_pil = self.extractor.find_correspondences_fastkmeans(img_crop,
+                #                                                                                          template,
+                #                                                                                          num_pairs=20,
+                #                                                                                          load_size=crop_size)
 
                 if not points1 or not points2:
                     raise ValueError("Insufficient correspondences found.")
