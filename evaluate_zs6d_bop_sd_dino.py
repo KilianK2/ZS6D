@@ -160,9 +160,8 @@ if __name__ == "__main__":
                         #desc = extractor.extract_descriptors(img_prep.to(device), layer=11, facet='key', bin=False,
                         #                                     include_cls=True)
 
-                        # check if img is image or cv2
-                        #img_base = Image.fromarray(img).convert('RGB')
-                        img_base = img.convert('RGB')
+                        # check if img_crop is correct or img
+                        img_base = img_crop.convert('RGB')
 
                         # Resizing
                         img_sd = resize(img_base, image_size_sd, resize=True, to_pil=True, edge=False)

@@ -28,7 +28,7 @@ from zs6d_sd_dino.sd_dino.extractor_dino import ViTExtractor
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Test pose estimation inference on test set')
     parser.add_argument('--config_file',
-                        default="./zs6d_configs/template_gt_preparation_configs/cfg_template_gt_generation_ycbv_sd_dino.json")
+                        default="./zs6d_configs/template_gt_preparation_configs/cfg_single_sd_dino.json")
 
     args = parser.parse_args()
 

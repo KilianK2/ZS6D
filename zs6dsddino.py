@@ -17,7 +17,7 @@ from zs6d_sd_dino.sd_dino.utils.utils_correspondence import resize
 class ZS6DSdDino:
 
     def __init__(self, model_sd, aug_sd, image_size_dino, image_size_sd, layer, facet, templates_gt_path, norm_factors_path, model_type='dinov2_vitb14', stride=14, subset_templates=1,
-                 max_crop_size=840):
+                 max_crop_size=182):
         # Set up logging
         self.logger = logging.getLogger(self.__class__.__name__)
         logging.basicConfig(level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -86,14 +86,13 @@ class ZS6DSdDino:
 
 
             with torch.no_grad():
-                #desc = self.extractor.extract_descriptors(img_prep.to(self.device), layer=11, facet='key', bin=False,
-                #                                          include_cls=True)
                 """SD-DINO"""
-                img_base = img.convert('RGB')
+                # check if this works (but img_crop is correct)
+                img_base = img_crop.convert('RGB')
 
                 # Resizing
                 img_sd = resize(img_base, self.image_size_sd, resize=True, to_pil=True, edge=False)
-                #img_dino = resize(img_base, self.image_size_dino, resize=True, to_pil=True, edge=False)
+
 
                 # Stable Diffusion
                 desc_sd = process_features_and_mask(self.model_sd, self.aug_sd, img_sd, input_text=None, mask=False, pca=True).reshape(
@@ -101,7 +100,6 @@ class ZS6DSdDino:
                 print(f"Shape of SD features: {desc_sd.shape}")
 
                 # DinoV2
-                #img_dino_batch = self.extractor.preprocess_pil(img_dino)
                 desc_dino = self.extractor.extract_descriptors(img_prep.to(self.device), self.layer, self.facet)
                 print(f"Shape of DINO features: {desc_dino.shape}")
 
@@ -111,10 +109,10 @@ class ZS6DSdDino:
                 desc_sd = desc_sd / desc_sd.norm(dim=-1, keepdim=True)
 
                 # fusion
-                desc_sd_dino = torch.cat((desc_sd, desc_dino), dim=-1)
-                print(f"Shape of SD-DINO features: {desc_sd_dino.shape}")
+                desc_sd_dino_raw = torch.cat((desc_sd, desc_dino), dim=-1)
+                print(f"Shape of SD-DINO features: {desc_sd_dino_raw.shape}")
 
-                desc_sd_dino = desc_sd_dino.squeeze(0).squeeze(0).detach().cpu()
+                desc_sd_dino = desc_sd_dino_raw.squeeze(0).squeeze(0).detach().cpu()
 
             matched_templates = utils.find_template_cpu(desc_sd_dino, self.templates_desc[obj_id], num_results=1) #found template
 
@@ -131,10 +129,17 @@ class ZS6DSdDino:
 
                 resize_factor = float(crop_size) / img_crop.size[0] #rezise_factor = 1.0
 
-                points1, points2, crop_pil, template_pil = self.extractor.find_correspondences_fastkmeans_sd_dino(img_crop,
-                                                                                                          template,
+                #img_crop = Image.fromarray(img_prep.squeeze().cpu().numpy())
+                input_image = img_base
+                input_pil = img_prep
+                template_image = template
+                template_pil, _, _ = self.extractor.preprocess(template_image, load_size=self.image_size_dino)
+
+                points1, points2, crop_pil, template_pil = self.extractor.find_correspondences_fastkmeans_sd_dino_v7(self.image_size_sd, self.model_sd, self.aug_sd, num_patches, input_image, input_pil,
+                                                                                                          template_image, template_pil,
                                                                                                           num_pairs=20,
-                                                                                                          load_size=crop_size)
+                                                                                                          load_size=self.image_size_dino)
+
 
                 #points1, points2, crop_pil, template_pil = self.extractor.find_correspondences_fastkmeans(img_crop,
                 #                                                                                          template,
@@ -147,7 +152,7 @@ class ZS6DSdDino:
                 img_uv = np.load(
                     f"{self.templates_gt[obj_id][matched_templates[0][1]]['img_crop'].split('.png')[0]}_uv.npy")
                 img_uv = img_uv.astype(np.uint8)
-                img_uv = cv2.resize(img_uv, (crop_size, crop_size))
+                img_uv = cv2.resize(img_uv, (self.image_size_dino, self.image_size_dino))
 
                 R_est, t_est = utils.get_pose_from_correspondences(points1, points2,
                                                                    y_offset, x_offset,
@@ -160,3 +165,4 @@ class ZS6DSdDino:
         except Exception as e:
             self.logger.error(f"Error in get_pose: {e}")
             raise
+
