@@ -1,0 +1,13 @@
+{"path_templates_folder": "./templates/ycbv_single",
+ "path_template_poses": "./templates/ycbv_single/obj_poses.npy",
+ "path_object_models_folder": "./templates/ycbv_single/models",
+ "path_models_info_json": "./templates/ycbv_single/models/models_info.json",
+ "obj_models_scale": 0.001,
+ "path_output_templates_and_descs_folder": "./templates/ycbv_desc_single",
+ "path_output_models_xyz": "./templates/ycbv_desc_single/models_xyz",
+ "cam_K": [1600.167, 0.0, 469.480,
+           0.0, 1868.102, 422.294,
+           0.0, 0.0, 1.0],
+ "template_resolution": [960, 840],
+ "output_template_gt_file":"./templates/ycbv_desc_single/ycbv_template_gt_single.json"
+}
