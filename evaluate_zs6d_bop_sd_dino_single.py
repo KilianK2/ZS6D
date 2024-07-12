@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Test pose estimation inference on test set')
     # adjust for ycbv
-    parser.add_argument('--config_file', default="./zs6d_configs/bop_eval_configs/cfg_lmo_inference_bop.json")
+    parser.add_argument('--config_file', default="./zs6d_configs/bop_eval_configs/cfg_ycbv_inference_bop_sd_dino_single.json")
 
     args = parser.parse_args()
 
@@ -73,7 +73,7 @@ if __name__ == "__main__":
     image_size_dino = 840
     layer = 11
     facet = 'token'
-    model, aug = load_model(diffusion_ver="v1-5", image_size=image_size_sd, num_timesteps=100)
+    model_sd, aug_sd = load_model(diffusion_ver="v1-5", image_size=image_size_sd, num_timesteps=100)
     patch_size = extractor.model.patch_embed.patch_size[0]
     num_patches = int(patch_size / stride * (image_size_dino // patch_size))
 
@@ -145,7 +145,7 @@ if __name__ == "__main__":
 
                     bbox = img_utils.get_bounding_box_from_mask(mask)
 
-                    img_crop, y_offset, x_offset = img_utils.make_quadratic_crop(np.array(img), bbox)
+                    img_crop_raw, y_offset, x_offset = img_utils.make_quadratic_crop(np.array(img), bbox)
 
                     mask_crop, _, _ = img_utils.make_quadratic_crop(mask, bbox)
 
@@ -161,14 +161,14 @@ if __name__ == "__main__":
                         #                                     include_cls=True)
 
                         # check if img_crop is correct or img
-                        img_base = img_crop.convert('RGB')
+                        img_base = img_crop_raw.convert('RGB')
 
                         # Resizing
                         img_sd = resize(img_base, image_size_sd, resize=True, to_pil=True, edge=False)
                         #img_dino = resize(img_base, image_size_dino, resize=True, to_pil=True, edge=False)
 
                         # Stable Diffusion
-                        desc_sd = process_features_and_mask(model, aug, img_sd, input_text=None, mask=False,
+                        desc_sd = process_features_and_mask(model_sd, aug_sd, img_sd, input_text=None, mask=False,
                                                             pca=True).reshape(1, 1, -1, num_patches ** 2).permute(0, 1,
                                                                                                                   3, 2)
                         print(f"Shape of SD features: {desc_sd.shape}")
@@ -220,9 +220,11 @@ if __name__ == "__main__":
 
                     try:
                         with torch.no_grad():
-                            points1, points2, crop_pil, template_pil = extractor.find_correspondences_fastkmeans(
-                                img_data.crops[i],
-                                template,
+                            input_image = img_data.crops[i]
+                            input_pil, _, _ = extractor.preprocess(input_image, load_size=image_size_dino)
+                            template_image = template
+                            template_pil, _, _ = extractor.preprocess(template_image, load_size=image_size_dino)
+                            points1, points2, crop_pil, template_pil = extractor.find_correspondences_nearest_neighbor_sd_dino(image_size_sd, model_sd, aug_sd, num_patches, input_image, input_pil, template_image, template_pil,
                                 num_pairs=20,
                                 load_size=img_data.crops[i].size[0])
                     except Exception as e:

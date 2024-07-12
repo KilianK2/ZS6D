@@ -1,0 +1,12 @@
+{ "templates_gt_path": "./gts/template_gts/ycbv_template_gt_sd_dino_single.json",
+  "gt_path": "./gts/test_gts/ycbv_bop_test_gt_sam.json",
+  "dataset_path": "./",
+  "scale_factor": 0.001,
+  "bbox_type": "bbox_visib",
+  "template_subset": 5,
+  "results_file": "results_ycbv_bop_sam_10templates.csv",
+  "norm_factor_path":"./templates/ycbv_single_desc/models_xyz/norm_factor.json",
+  "num_matched_templates":1,
+  "image_resolution":[480, 640],
+  "debug_imgs": 1
+}
