@@ -1023,6 +1023,7 @@ class PoseViTExtractor(ViTExtractor):
             points1.append((y1_show, x1_show))
             points2.append((y2_show, x2_show))
 
+
         #for y1, x1, y2, x2 in zip(img1_y_to_show, img1_x_to_show, img2_y_to_show, img2_x_to_show):
         #    x1_show = (int(x1) - 1) * self.stride[1] + self.stride[1] + self.p // 2
         #    y1_show = (int(y1) - 1) * self.stride[0] + self.stride[0] + self.p // 2
@@ -1294,6 +1295,7 @@ class PoseViTExtractor(ViTExtractor):
         desc_sd_input = process_features_and_mask(model_sd, aug_sd, image_sd_input, mask=False, pca=True).reshape(
             1, 1, -1, num_patches ** 2).permute(0, 1, 3, 2)
 
+
         # normalization
         descriptors1_dino = desc_dino_input / desc_dino_input.norm(dim=-1, keepdim=True)
         descriptors1_sd = desc_sd_input / desc_sd_input.norm(dim=-1, keepdim=True)
@@ -1335,22 +1337,61 @@ class PoseViTExtractor(ViTExtractor):
         img2_y_to_show = (img2_indices_to_show / num_patches2).cpu().numpy()
         img2_x_to_show = (img2_indices_to_show % num_patches2).cpu().numpy()
         points1, points2 = [], []
-        for y1, x1, y2, x2 in zip(img1_y_to_show, img1_x_to_show, img2_y_to_show, img2_x_to_show):
-            x1_show = int((x1[0] - 1) * load_size1/ num_patches1 + load_size1 / (2 * num_patches1))
-            y1_show = int((y1[0] - 1) * load_size1 / num_patches1 + load_size1 / (2 * num_patches1))
-            x2_show = int((x2[0] - 1) * load_size2 / num_patches2 + load_size2 / (2 * num_patches2))
-            y2_show = int((y2[0] - 1) * load_size2 / num_patches2 + load_size2 / (2 * num_patches2))
-            points1.append((y1_show, x1_show))
-            points2.append((y2_show, x2_show))
-
         #for y1, x1, y2, x2 in zip(img1_y_to_show, img1_x_to_show, img2_y_to_show, img2_x_to_show):
-        #    x1_show = (int(x1) - 1) * self.stride[1] + self.stride[1] + self.p // 2
-        #    y1_show = (int(y1) - 1) * self.stride[0] + self.stride[0] + self.p // 2
-        #    x2_show = (int(x2) - 1) * self.stride[1] + self.stride[1] + self.p // 2
-        #    y2_show = (int(y2) - 1) * self.stride[0] + self.stride[0] + self.p // 2
+        #    x1_show = int((x1 - 1) * load_size1 / num_patches1 + load_size1 / (2 * num_patches1))
+        #    y1_show = int((y1 - 1) * load_size1 / num_patches1 + load_size1 / (2 * num_patches1))
+        #    x2_show = int((x2 - 1) * load_size2 / num_patches2 + load_size2 / (2 * num_patches2))
+        #    y2_show = int((y2 - 1) * load_size2 / num_patches2 + load_size2 / (2 * num_patches2))
         #    points1.append((y1_show, x1_show))
         #    points2.append((y2_show, x2_show))
 
+        for y1, x1, y2, x2 in zip(img1_y_to_show, img1_x_to_show, img2_y_to_show, img2_x_to_show):
+            x1_show = (int(x1) - 1) * self.stride[1] + self.stride[1] + self.p // 2
+            y1_show = (int(y1) - 1) * self.stride[0] + self.stride[0] + self.p // 2
+            x2_show = (int(x2) - 1) * self.stride[1] + self.stride[1] + self.p // 2
+            y2_show = (int(y2) - 1) * self.stride[0] + self.stride[0] + self.p // 2
+            points1.append((y1_show, x1_show))
+            points2.append((y2_show, x2_show))
+
+
+        end_time_corr = time.time()
+        elapsed_corr = end_time_corr - start_time_corr
+
+        return points1, points2, input_pil, template_pil
+
+    def find_correspondences_nearest_neighbor_sd_dino_1(self, image_size_sd, model_sd, aug_sd, num_patches, input_image,
+                                                      input_pil, template_image, template_pil, num_pairs: int = 10,
+                                                      load_size: int = 840, layer: int = 11, facet: str = 'token',
+                                                      bin: bool = False, thresh: float = 0.05) -> Tuple[
+        List[Tuple[float, float]], List[Tuple[float, float]], Image.Image, Image.Image]:
+        # ... (previous code remains the same)
+
+        start_time_nn = time.time()
+        # find nearest neighbors
+        distances, indices = torch.topk(similarities[0, 0], k=num_pairs, largest=True)
+        end_time_nn = time.time()
+        elapsed_nn = end_time_nn - start_time_nn
+
+        # filter out low-similarity correspondences
+        mask = distances > thresh
+        indices = indices[mask]
+
+        # get coordinates to show
+        img1_indices_to_show = torch.arange(num_patches1 * num_patches1, device=self.device)[indices]
+        img2_indices_to_show = indices
+        # coordinates in descriptor map's dimensions
+        img1_y_to_show = (img1_indices_to_show / num_patches1).cpu().numpy()
+        img1_x_to_show = (img1_indices_to_show % num_patches1).cpu().numpy()
+        img2_y_to_show = (img2_indices_to_show / num_patches2).cpu().numpy()
+        img2_x_to_show = (img2_indices_to_show % num_patches2).cpu().numpy()
+        points1, points2 = [], []
+        for y1, x1, y2, x2 in zip(img1_y_to_show, img1_x_to_show, img2_y_to_show, img2_x_to_show):
+            x1_show = int((x1 - 1) * load_size1 / num_patches1 + load_size1 / (2 * num_patches1))
+            y1_show = int((y1 - 1) * load_size1 / num_patches1 + load_size1 / (2 * num_patches1))
+            x2_show = int((x2 - 1) * load_size2 / num_patches2 + load_size2 / (2 * num_patches2))
+            y2_show = int((y2 - 1) * load_size2 / num_patches2 + load_size2 / (2 * num_patches2))
+            points1.append((y1_show, x1_show))
+            points2.append((y2_show, x2_show))
 
         end_time_corr = time.time()
         elapsed_corr = end_time_corr - start_time_corr

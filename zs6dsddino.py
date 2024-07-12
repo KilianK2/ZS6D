@@ -16,7 +16,7 @@ from zs6d_sd_dino.sd_dino.utils.utils_correspondence import resize
 
 class ZS6DSdDino:
 
-    def __init__(self, model_sd, aug_sd, image_size_dino, image_size_sd, layer, facet, templates_gt_path, norm_factors_path, model_type='dinov2_vitb14', stride=14, subset_templates=1,
+    def __init__(self, model_sd, aug_sd, image_size_dino, image_size_sd, layer, facet, templates_gt_path, norm_factors_path, model_type='dinov2_vitb14', stride=14, subset_templates=8,
                  max_crop_size=182):
         # Set up logging
         self.logger = logging.getLogger(self.__class__.__name__)

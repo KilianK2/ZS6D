@@ -96,6 +96,7 @@ if __name__ == "__main__":
     print("Preparing templates finished!")
 
     print("Processing input images:")
+
     for all_id, img_labels in tqdm(data_gt.items()):
         scene_id = all_id.split("_")[0]
         img_id = all_id.split("_")[-1]
@@ -107,6 +108,8 @@ if __name__ == "__main__":
 
         img = Image.open(img_path)
         cam_K = np.array(img_labels[0]['cam_K']).reshape((3, 3))
+
+
 
         img_data = ImageContainer_masks(img=img,
                                         img_name=img_name,
@@ -129,7 +132,9 @@ if __name__ == "__main__":
             if bbox_gt[2] == 0 or bbox_gt[3] == 0:
                 continue
 
+
             if bbox_gt != [-1, -1, -1, -1]:
+
                 img_data.t_gts.append(np.array(img_label['cam_t_m2c']) * config['scale_factor'])
                 img_data.R_gts.append(np.array(img_label['cam_R_m2c']).reshape((3, 3)))
                 img_data.obj_ids.append(str(img_label['obj_id']))
@@ -149,7 +154,10 @@ if __name__ == "__main__":
 
                     mask_crop, _, _ = img_utils.make_quadratic_crop(mask, bbox)
 
-                    img_crop = cv2.bitwise_and(img_crop, img_crop, mask=mask_crop)
+
+                    img_crop = cv2.bitwise_and(img_crop_raw, img_crop_raw, mask=mask_crop)
+
+
 
                     img_data.crops.append(Image.fromarray(img_crop))
 
@@ -157,15 +165,12 @@ if __name__ == "__main__":
 
                     with torch.no_grad():
                         """SD-DINO"""
-                        #desc = extractor.extract_descriptors(img_prep.to(device), layer=11, facet='key', bin=False,
-                        #                                     include_cls=True)
 
-                        # check if img_crop is correct or img
-                        img_base = img_crop_raw.convert('RGB')
+                        img_base = Image.fromarray(img_crop_raw).convert('RGB')
+
 
                         # Resizing
                         img_sd = resize(img_base, image_size_sd, resize=True, to_pil=True, edge=False)
-                        #img_dino = resize(img_base, image_size_dino, resize=True, to_pil=True, edge=False)
 
                         # Stable Diffusion
                         desc_sd = process_features_and_mask(model_sd, aug_sd, img_sd, input_text=None, mask=False,
@@ -205,10 +210,13 @@ if __name__ == "__main__":
             object_id = img_data.obj_ids[i]
             if img_data.crops[i] is not None:
                 try:
+
+
                     matched_templates = utils.find_template_cpu(img_data.descs[i],
                                                                 templates_desc[object_id],
                                                                 num_results=config['num_matched_templates'])
                 except Exception as e:
+
                     logger.error(
                         f"Template matching failed for {img_data.img_name} and object_id {img_data.obj_ids[i]}: {e}")
 
@@ -288,14 +296,16 @@ if __name__ == "__main__":
             # Prepare for writing:
             R_best_str = " ".join(map(str, R_best.flatten()))
             t_best_str = " ".join(map(str, t_best * 1000))
-            elapsed_time = end_time - start_time
+            #elapsed_time = end_time - start_time
             # Write the detections to the CSV file
 
             # ['scene_id', 'im_id', 'obj_id', 'score', 'R', 't', 'time']
             with open(csv_file, mode='a', newline='') as csvfile:
                 csv_writer = csv.writer(csvfile)
+                #csv_writer.writerow(
+                #    [img_data.scene_id, img_data.img_name, object_id, score, R_best_str, t_best_str, elapsed_time])
                 csv_writer.writerow(
-                    [img_data.scene_id, img_data.img_name, object_id, score, R_best_str, t_best_str, elapsed_time])
+                    [img_data.scene_id, img_data.img_name, object_id, score, R_best_str, t_best_str])
 
             if config['debug_imgs']:
                 if i % config['debug_imgs'] == 0:
