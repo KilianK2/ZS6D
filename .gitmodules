@@ -5,3 +5,6 @@
 [submodule "bop_toolkit"]
 	path = bop_toolkit
 	url = https://github.com/thodan/bop_toolkit.git 
+[submodule "external/sd_dino"]
+	path = external/sd_dino
+	url = https://github.com/Junyi42/sd-dino.git
