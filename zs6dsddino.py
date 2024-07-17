@@ -16,7 +16,7 @@ from zs6d_sd_dino.sd_dino.utils.utils_correspondence import resize
 
 class ZS6DSdDino:
 
-    def __init__(self, model_sd, aug_sd, image_size_dino, image_size_sd, layer, facet, templates_gt_path, norm_factors_path, model_type='dinov2_vitb14', stride=14, subset_templates=1,
+    def __init__(self, model_sd, aug_sd, image_size_dino, image_size_sd, layer, facet, templates_gt_path, norm_factors_path, model_type='dinov2_vitb14', stride=14, subset_templates=8,
                  max_crop_size=182):
         # Set up logging
         self.logger = logging.getLogger(self.__class__.__name__)
@@ -131,16 +131,16 @@ class ZS6DSdDino:
                 #img_crop = Image.fromarray(img_prep.squeeze().cpu().numpy())
 
                 """TODO: Check if input for kmeans is correct. What about crop_size? load_size = crop_size"""
-                input_image = img_base
-                input_pil = img_prep
+                input_image = img_crop
+                input_pil, _, _ = self.extractor.preprocess(img_crop, load_size=crop_size)
                 template_image = template
-                template_pil, _, _ = self.extractor.preprocess(template_image, load_size=self.image_size_dino)
+                template_pil, _, _ = self.extractor.preprocess(template_image, load_size=crop_size)
 
                 # v7 and v6 are valid but wrong results
-                points1, points2, crop_pil, template_pil = self.extractor.find_correspondences_fastkmeans_sd_dino_v7(self.image_size_sd, self.model_sd, self.aug_sd, num_patches, input_image, input_pil,
-                                                                                                          template_image, template_pil,
+                points1, points2, input_pil, template_pil = self.extractor.find_correspondences_nearest_neighbor_sd_dino(self.image_size_sd, self.model_sd, self.aug_sd, num_patches, input_image, input_pil,
+                                                                                                          template_image,template_pil,
                                                                                                           num_pairs=20,
-                                                                                                          load_size=self.image_size_dino)
+                                                                                                          load_size=crop_size)
 
 
                 #points1, points2, crop_pil, template_pil = self.extractor.find_correspondences_fastkmeans(img_crop,
@@ -156,7 +156,7 @@ class ZS6DSdDino:
                 img_uv = img_uv.astype(np.uint8)
 
                 """TODO: Check if rezising is correct"""
-                img_uv = cv2.resize(img_uv, (self.image_size_dino, self.image_size_dino))
+                img_uv = cv2.resize(img_uv, (crop_size, crop_size))
 
                 R_est, t_est = utils.get_pose_from_correspondences(points1, points2,
                                                                    y_offset, x_offset,
@@ -169,4 +169,3 @@ class ZS6DSdDino:
         except Exception as e:
             self.logger.error(f"Error in get_pose: {e}")
             raise
-
