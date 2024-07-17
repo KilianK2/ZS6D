@@ -46,7 +46,7 @@ if __name__ == "__main__":
         norm_factors = json.load(f)
 
     # Set up a results csv file:
-    csv_file = os.path.join('./results', config['results_file'])
+    csv_file = os.path.join('../../results', config['results_file'])
 
     # Column names for the CSV file
     headers = ['scene_id', 'im_id', 'obj_id', 'score', 'R', 't', 'time']
@@ -57,7 +57,7 @@ if __name__ == "__main__":
         csv_writer.writerow(headers)
 
     if config['debug_imgs']:
-        debug_img_path = os.path.join("./debug_imgs", config['results_file'].split(".csv")[0])
+        debug_img_path = os.path.join("../../debug_imgs", config['results_file'].split(".csv")[0])
         if not os.path.exists(debug_img_path):
             os.makedirs(debug_img_path)
 

@@ -8,9 +8,10 @@ from PIL import Image
 import cv2
 import pose_utils.utils as utils
 import logging
-from src.pose_extractor import PoseViTExtractor
-from zs6d_sd_dino.sd_dino.extractor_sd import process_features_and_mask
-from zs6d_sd_dino.sd_dino.utils.utils_correspondence import resize
+#from src.pose_extractor import PoseViTExtractor
+from zs6d_sd_dino.pose_extractor_sd_dino import PoseViTExtractorSdDino
+from external.sd_dino.extractor_sd import process_features_and_mask
+from external.sd_dino.utils.utils_correspondence import resize
 
 
 
@@ -48,7 +49,7 @@ class ZS6DSdDino:
 
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-        self.extractor = PoseViTExtractor(model_type=self.model_type, stride=self.stride, device=self.device)
+        self.extractor = PoseViTExtractorSdDino(model_type=self.model_type, stride=self.stride, device=self.device)
 
 
 
