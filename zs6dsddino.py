@@ -9,7 +9,7 @@ import cv2
 import pose_utils.utils as utils
 import logging
 #from src.pose_extractor import PoseViTExtractor
-from zs6d_sd_dino.pose_extractor_sd_dino import PoseViTExtractorSdDino
+from src.pose_extractor_sd_dino import PoseViTExtractorSdDino
 from external.sd_dino.extractor_sd import process_features_and_mask
 from external.sd_dino.utils.utils_correspondence import resize
 
@@ -34,8 +34,7 @@ class ZS6DSdDino:
         self.image_size_sd = image_size_sd
         self.layer = layer
         self.facet = facet
-        #self.patch_size = self.model.patch_embed.patch_size[0]
-        #self.num_patches = int(self.patch_size / self.stride * (image_size_dino // self.patch_size))
+
 
         try:
             with open(os.path.join(templates_gt_path), 'r') as f:
@@ -138,7 +137,7 @@ class ZS6DSdDino:
                 template_pil, _, _ = self.extractor.preprocess(template_image, load_size=self.image_size_dino)
 
                 # v7 and v6 are valid but wrong results
-                points1, points2, crop_pil, template_pil = self.extractor.find_correspondences_fastkmeans_sd_dino_v7(self.image_size_sd, self.model_sd, self.aug_sd, num_patches, input_image, input_pil,
+                points1, points2, crop_pil, template_pil = self.extractor.find_correspondences_nearest_neighbor_sd_dino(self.image_size_sd, self.model_sd, self.aug_sd, num_patches, input_image, input_pil,
                                                                                                           template_image, template_pil,
                                                                                                           num_pairs=20,
                                                                                                           load_size=self.image_size_dino)

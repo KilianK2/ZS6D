@@ -3,27 +3,19 @@ import os
 import json
 import numpy as np
 import torch
-from src.pose_extractor import PoseViTExtractor
+from src.pose_extractor_sd_dino import PoseViTExtractorSdDino
 from tools.ply_file_to_3d_coord_model import convert_unique
 from rendering.renderer_xyz import Renderer
 from rendering.model import Model3D
 from tqdm import tqdm
 import cv2
 from PIL import Image
-#from pose_utils import vis_utils
 from pose_utils import img_utils
 from rendering.utils import get_rendering, get_sympose
-#from extractor_sd import load_model
-from zs6d_sd_dino.sd_dino.extractor_sd import load_model
-from zs6d_sd_dino.sd_dino.extractor_sd import process_features_and_mask
+from external.sd_dino.extractor_sd import load_model
+from external.sd_dino.extractor_sd import process_features_and_mask
+from external.sd_dino.utils.utils_correspondence import resize
 
-#from fused_zs6d import Fused_ZS6D
-#from zs6d_sd_dino.fused_zs6d import Fused_ZS6D
-#from zs6d_sd_dino.fused_feature_extractor import get_fused_features
-#import sys
-from zs6d_sd_dino.sd_dino.utils.utils_correspondence import resize
-from zs6d_sd_dino.sd_dino.extractor_dino import ViTExtractor
-from torchvision.transforms import ToPILImage
 
 
 if __name__ == "__main__":
@@ -78,7 +70,7 @@ if __name__ == "__main__":
 
     """Setup for Fused_ZS6D"""
     stride = 14
-    extractor = PoseViTExtractor(model_type='dinov2_vitb14', stride=stride, device=device)
+    extractor = PoseViTExtractorSdDino(model_type='dinov2_vitb14', stride=stride, device=device)
     #extractor_dino = ViTExtractor(model_type='dinov2_vitb14', stride=stride, device=device)
     image_size_sd = 960
     image_size_dino = 840
