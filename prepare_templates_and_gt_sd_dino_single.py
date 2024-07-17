@@ -23,6 +23,7 @@ from zs6d_sd_dino.sd_dino.extractor_sd import process_features_and_mask
 #import sys
 from zs6d_sd_dino.sd_dino.utils.utils_correspondence import resize
 from zs6d_sd_dino.sd_dino.extractor_dino import ViTExtractor
+from torchvision.transforms import ToPILImage
 
 
 if __name__ == "__main__":
@@ -150,12 +151,11 @@ if __name__ == "__main__":
                     img_prep, img_crop, _ = extractor.preprocess(Image.fromarray(img_crop_raw), load_size=image_size_dino)
 
                     """SD-DINO"""
-                    img_base = Image.fromarray(img).convert('RGB')
+
+                    img_base = Image.fromarray(img_crop_raw).convert('RGB')
 
                     # Resizing
                     img_sd = resize(img_base, image_size_sd, resize=True, to_pil=True, edge=False)
-                    #img_dino = resize(img_base, image_size_dino, resize=True, to_pil=True, edge=False)
-
 
 
                     # Stable Diffusion
@@ -163,21 +163,8 @@ if __name__ == "__main__":
                     print(f"Shape of SD features: {desc_sd.shape}")
 
                     # DinoV2
-                    #img_dino_batch = extractor.preprocess_pil(img_dino)
                     desc_dino = extractor.extract_descriptors(img_prep.to(device), layer, facet)
                     print(f"Shape of DINO features: {desc_dino.shape}")
-                    # adjusted for dinov2
-                    #desc_dino = extractor.extract_descriptors(img_prep.to(device), layer=11, facet='token', bin=False,
-                     #                                    include_cls=True)
-
-                    #img_base_sd = Image.fromarray(img_crop_raw)
-                    #img_prep_sd = resize(img_base_sd, image_size_sd, resize=True, to_pil=True, edge=False)
-
-                    #desc_sd = process_features_and_mask(model, aug, img_prep_sd, input_text=None, mask=False,
-                    #                          pca=True).reshape(1, 1, -1, num_patches ** 2).permute(0, 1, 3, 2)
-
-                    #desc_sd = torch.nn.functional.interpolate(desc_sd, size=(num_patches, num_patches), mode='bilinear',
-                    #                                          align_corners=False)
 
                     # normalization
                     desc_dino = desc_dino / desc_dino.norm(dim=-1, keepdim=True)
