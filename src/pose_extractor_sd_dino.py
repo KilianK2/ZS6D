@@ -21,13 +21,12 @@ import torch
 
 class PoseViTExtractorSdDino(PoseViTExtractor):
 
-    def __init__(self, model_type: str = 'dino_vits8', stride: int = 4, model: nn.Module = None, device: str = 'cuda'):
+    def __init__(self, model_type, stride, device, model: nn.Module = None):
         self.model_type = model_type
         self.stride = stride
-        self.model = model
         self.device = device
-        print("POSEVITEXTRACTORSDDINO")
-        super().__init__(model_type = self.model_type, stride = self.stride, model=self.model, device=self.device)
+        self.model = model
+        super().__init__(model_type=self.model_type, stride=self.stride, model=self.model, device=self.device)
 
 
     def find_correspondences_nearest_neighbor_sd_dino(self, image_size_sd, model_sd, aug_sd, num_patches, input_image,

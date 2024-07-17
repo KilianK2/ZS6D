@@ -8,7 +8,7 @@ from PIL import Image
 import cv2
 import pose_utils.utils as utils
 import logging
-#from src.pose_extractor import PoseViTExtractor
+from src.pose_extractor import PoseViTExtractor
 from src.pose_extractor_sd_dino import PoseViTExtractorSdDino
 from external.sd_dino.extractor_sd import process_features_and_mask
 from external.sd_dino.utils.utils_correspondence import resize
@@ -70,6 +70,7 @@ class ZS6DSdDino:
         self.templates_gt = templates_gt_subset
 
         self.logger.info("Preparing templates and loading of extractor is done!")
+
 
     def get_pose(self, num_patches, img, obj_id, mask, cam_K, bbox=None):
         try:
