@@ -17,8 +17,8 @@ from external.sd_dino.utils.utils_correspondence import resize
 
 class ZS6DSdDino:
 
-    def __init__(self, model_sd, aug_sd, image_size_dino, image_size_sd, layer, facet, templates_gt_path, norm_factors_path, model_type='dinov2_vitb14', stride=14, subset_templates=1,
-                 max_crop_size=182):
+    def __init__(self, model_sd, aug_sd, image_size_dino, image_size_sd, layer, facet, templates_gt_path, norm_factors_path, model_type='dinov2_vitb14', stride=14, subset_templates=6,
+                 max_crop_size=840):
         # Set up logging
         self.logger = logging.getLogger(self.__class__.__name__)
         logging.basicConfig(level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -99,16 +99,16 @@ class ZS6DSdDino:
                     1, 1, -1, num_patches ** 2).permute(0, 1, 3, 2)
                 print(f"Shape of SD features: {desc_sd.shape}")
 
-                # DinoV2
+                # DINOv2
                 desc_dino = self.extractor.extract_descriptors(img_prep.to(self.device), self.layer, self.facet)
                 print(f"Shape of DINO features: {desc_dino.shape}")
 
 
-                # normalization
+                # Normalization
                 desc_dino = desc_dino / desc_dino.norm(dim=-1, keepdim=True)
                 desc_sd = desc_sd / desc_sd.norm(dim=-1, keepdim=True)
 
-                # fusion
+                # Fusion
                 desc_sd_dino_raw = torch.cat((desc_sd, desc_dino), dim=-1)
                 print(f"Shape of SD-DINO features: {desc_sd_dino_raw.shape}")
 
@@ -131,23 +131,24 @@ class ZS6DSdDino:
 
                 #img_crop = Image.fromarray(img_prep.squeeze().cpu().numpy())
 
-                """TODO: Check if input for kmeans is correct. What about crop_size? load_size = crop_size"""
+                """ Find Correspondences """
                 input_image = img_base
                 input_pil = img_prep
                 template_image = template
                 template_pil, _, _ = self.extractor.preprocess(template_image, load_size=self.image_size_dino)
 
                 # v7 and v6 are valid but wrong results
-                points1, points2, crop_pil, template_pil = self.extractor.find_correspondences_nearest_neighbor_sd_dino(self.image_size_sd, self.model_sd, self.aug_sd, num_patches, input_image, input_pil,
-                                                                                                          template_image, template_pil,
-                                                                                                          num_pairs=20,
-                                                                                                          load_size=self.image_size_dino)
-
-
-                #points1, points2, crop_pil, template_pil = self.extractor.find_correspondences_fastkmeans(img_crop,
-                #                                                                                          template,
+                #points1, points2, crop_pil, template_pil = self.extractor.find_correspondences_nearest_neighbor_sd_dino(self.image_size_sd, self.model_sd, self.aug_sd, num_patches, input_image, input_pil,
+                #                                                                                          template_image, template_pil,
                 #                                                                                          num_pairs=20,
-                #                                                                                          load_size=crop_size)
+                #                                                                                          load_size=self.image_size_dino)
+
+                #crop_size = self.image_size_dino
+
+
+                points1, points2, crop_pil, template_pil = self.extractor.find_correspondences_fastkmeans_sd_dino( input_image, input_pil, template_image, template_pil, num_patches, self.model_sd, self.aug_sd, self.image_size_sd,
+                                                                                                          num_pairs=20,
+                                                                                                          load_size=crop_size)
 
                 if not points1 or not points2:
                     raise ValueError("Insufficient correspondences found.")

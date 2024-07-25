@@ -21,10 +21,10 @@ from external.sd_dino.extractor_dino import ViTExtractor
 class PoseViTExtractor(ViTExtractor):
 
     def __init__(self, model_type: str = 'dino_vits8', stride: int = 4, model: nn.Module = None, device: str = 'cuda'):
-        #self.model_type = model_type
-        #self.stride = stride
-        #self.model = model
-        #self.device = device
+        self.model_type = model_type
+        self.stride = stride
+        self.model = model
+        self.device = device
         super().__init__(model_type = self.model_type, stride = self.stride, model=self.model, device=self.device)
 
         self.prep = transforms.Compose([

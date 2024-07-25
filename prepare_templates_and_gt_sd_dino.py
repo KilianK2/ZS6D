@@ -21,7 +21,7 @@ from external.sd_dino.utils.utils_correspondence import resize
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Test pose estimation inference on test set')
     parser.add_argument('--config_file',
-                        default="./zs6d_configs/template_gt_preparation_configs/cfg_template_gt_generation_ycbv_sd_dino.json")
+                        default="./zs6d_configs/template_gt_preparation_configs/cfg_template_gt_generation_lmo_sd_dino.json")
 
     args = parser.parse_args()
 

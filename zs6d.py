@@ -80,7 +80,7 @@ class ZS6D:
                 if img_crop.size[0] < self.max_crop_size:
                     crop_size = img_crop.size[0]
                 else:
-                    crop_size = self.max_crop_size
+                    crop_size = self.max_crop_size # size of 80
 
                 resize_factor = float(crop_size) / img_crop.size[0]
 

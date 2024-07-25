@@ -1,0 +1,14 @@
+{"path_templates_folder": "./templates/lmo",
+ "path_template_poses": "./templates/lmo/obj_poses.npy",
+ "path_object_models_folder": "./templates/lmo/models",
+ "path_models_info_json": "./templates/lmo/models/models_info.json",
+ "obj_models_scale": 0.001,
+ "path_output_templates_and_descs_folder": "./templates/lmo_desc_sd_dino",
+ "path_output_models_xyz": "./templates/lmo_desc_sd_dino/models_xyz",
+ "cam_K": [572.4114, 0.0, 325.2611,
+          0.0, 573.57043, 242.04899,
+          0.0, 0.0, 1.0],
+ "template_resolution": [640, 480],
+ "output_template_gt_file":"./templates/lmo_desc_sd_dino/lmo_template_gt_sd_dino.json"
+
+}
