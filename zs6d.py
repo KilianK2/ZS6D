@@ -9,10 +9,11 @@ import cv2
 import pose_utils.utils as utils
 import logging
 from src.pose_extractor import PoseViTExtractor
+import matplotlib.pyplot as plt
 
 class ZS6D:
 
-    def __init__(self, templates_gt_path, norm_factors_path, model_type='dino_vits8', stride=4, subset_templates=1, max_crop_size=80):
+    def __init__(self, templates_gt_path, norm_factors_path, model_type='dino_vits8', stride=4, subset_templates=5, max_crop_size=80):
         # Set up logging
         self.logger = logging.getLogger(self.__class__.__name__)
         logging.basicConfig(level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -56,6 +57,22 @@ class ZS6D:
 
     def get_pose(self, img, obj_id, mask, cam_K, bbox=None):
         try:
+
+            def show_debug_image(img, name):
+                if isinstance(img, np.ndarray):
+                    height, width = img.shape[:2]
+                elif isinstance(img, Image.Image):
+                    width, height = img.size
+                else:
+                    raise ValueError("Unsupported image type")
+
+                title = f"{name} - Size: {width}x{height}"
+
+                plt.imshow(img)
+                plt.title(title)
+                plt.axis('off')
+                plt.show()
+
             if bbox is None:
                 bbox = img_utils.get_bounding_box_from_mask(mask)
 
@@ -65,7 +82,10 @@ class ZS6D:
             img_crop = Image.fromarray(img_crop)
             img_prep, _, _ = self.extractor.preprocess(img_crop, load_size=224)
 
+            show_debug_image(img_crop, "Cropped Image")
+
             with torch.no_grad():
+                #show_debug_image(np.array(img_prep), "Resized SD Image")
                 desc = self.extractor.extract_descriptors(img_prep.to(self.device), layer=11, facet='key', bin=False, include_cls=True)
                 desc = desc.squeeze(0).squeeze(0).detach().cpu()
 
@@ -76,7 +96,10 @@ class ZS6D:
 
             template = Image.open(self.templates_gt[obj_id][matched_templates[0][1]]['img_crop'])
 
+            show_debug_image(np.array(template), "Matched Template")
+
             with torch.no_grad():
+
                 if img_crop.size[0] < self.max_crop_size:
                     crop_size = img_crop.size[0]
                 else:
@@ -91,7 +114,11 @@ class ZS6D:
 
                 img_uv = np.load(f"{self.templates_gt[obj_id][matched_templates[0][1]]['img_crop'].split('.png')[0]}_uv.npy")
                 img_uv = img_uv.astype(np.uint8)
+                show_debug_image(img_uv, "Original UV Image")
+
                 img_uv = cv2.resize(img_uv, (crop_size, crop_size))
+
+                show_debug_image(img_uv, "Resized UV Image")
                 
                 R_est, t_est = utils.get_pose_from_correspondences(points1, points2, 
                                                                    y_offset, x_offset, 

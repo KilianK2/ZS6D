@@ -253,7 +253,7 @@ class PoseViTExtractorSdDino(PoseViTExtractor):
 
         """ Descriptor 1: Input """
         # Stable Diffusion
-        img_sd1 = resize(input_image, image_size_sd, resize=True, to_pil=True, edge=False)
+        img_sd1 = resize(input_image, image_size_sd, resize=True, to_pil=True, edge=False) # size 960 x 960
 
         desc_sd1 = process_features_and_mask(model_sd, aug_sd, img_sd1, input_text=None, mask=False,
                                             pca=True).reshape(1, 1, -1, num_patches ** 2).permute(0, 1, 3, 2)
@@ -273,7 +273,7 @@ class PoseViTExtractorSdDino(PoseViTExtractor):
 
         """ Descriptor 2: Template """
         # Stable Diffusion
-        img_sd2 = resize(template_image, image_size_sd, resize=True, to_pil=True, edge=False)
+        img_sd2 = resize(template_image, image_size_sd, resize=True, to_pil=True, edge=False) # size 960 x 960
 
         desc_sd2 = process_features_and_mask(model_sd, aug_sd, img_sd2, input_text=None, mask=False,
                                              pca=True).reshape(1, 1, -1, num_patches ** 2).permute(0, 1, 3, 2)

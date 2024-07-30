@@ -172,7 +172,8 @@ def get_pose_from_correspondences(points1, points2, y_offset, x_offset, img_uv, 
         if np.any(img_uv[point2[0], point2[1]] != [0,0,0]):
             valid_points1.append(point1)
             valid_points2.append(point2)
-    
+    print("valid points 1")
+    print(valid_points1)
     # Check if enough correspondences for PnPRansac
     if len(valid_points1) < 4:
         return None, None
@@ -181,6 +182,8 @@ def get_pose_from_correspondences(points1, points2, y_offset, x_offset, img_uv, 
 
     valid_points1 = np.array(valid_points1).astype(np.float64)/resize_factor
 
+    print("valid points 1 after transformation")
+    print(valid_points1)
     valid_points1[:,0] += y_offset
     valid_points1[:,1] += x_offset
 

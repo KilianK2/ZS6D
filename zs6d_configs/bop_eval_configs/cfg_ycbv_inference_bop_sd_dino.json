@@ -1,6 +1,6 @@
 { "templates_gt_path": "./gts/template_gts/ycbv_template_gt_sd_dino.json",
   "gt_path": "./gts/test_gts/ycbv_bop_test_gt_sam.json",
-  "dataset_path": "./",
+  "dataset_path": "./test/ycbv_test_bop19",
   "scale_factor": 0.001,
   "bbox_type": "bbox_visib",
   "template_subset": 5,

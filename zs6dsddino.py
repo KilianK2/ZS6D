@@ -12,12 +12,12 @@ from src.pose_extractor import PoseViTExtractor
 from src.pose_extractor_sd_dino import PoseViTExtractorSdDino
 from external.sd_dino.extractor_sd import process_features_and_mask
 from external.sd_dino.utils.utils_correspondence import resize
-
+import matplotlib.pyplot as plt
 
 
 class ZS6DSdDino:
 
-    def __init__(self, model_sd, aug_sd, image_size_dino, image_size_sd, layer, facet, templates_gt_path, norm_factors_path, model_type='dinov2_vitb14', stride=14, subset_templates=6,
+    def __init__(self, model_sd, aug_sd, image_size_dino, image_size_sd, layer, facet, templates_gt_path, norm_factors_path, model_type='dinov2_vitb14', stride=14, subset_templates=15,
                  max_crop_size=840):
         # Set up logging
         self.logger = logging.getLogger(self.__class__.__name__)
@@ -74,6 +74,21 @@ class ZS6DSdDino:
 
     def get_pose(self, num_patches, img, obj_id, mask, cam_K, bbox=None):
         try:
+            def show_debug_image(img, name):
+                if isinstance(img, np.ndarray):
+                    height, width = img.shape[:2]
+                elif isinstance(img, Image.Image):
+                    width, height = img.size
+                else:
+                    raise ValueError("Unsupported image type")
+
+                title = f"{name} - Size: {width}x{height}"
+
+                plt.imshow(img)
+                plt.title(title)
+                plt.axis('off')
+                plt.show()
+
             if bbox is None:
                 bbox = img_utils.get_bounding_box_from_mask(mask)
 
@@ -82,6 +97,9 @@ class ZS6DSdDino:
             img_crop = cv2.bitwise_and(img_crop, img_crop, mask=mask_crop)
             img_crop = Image.fromarray(img_crop)
             img_prep, _, _ = self.extractor.preprocess(img_crop, load_size=self.image_size_dino)
+
+            show_debug_image(img_crop, "Cropped Image of full scene")
+
 
 
 
@@ -93,6 +111,7 @@ class ZS6DSdDino:
                 # Resizing
                 img_sd = resize(img_base, self.image_size_sd, resize=True, to_pil=True, edge=False)
 
+                show_debug_image(np.array(img_sd), "Resized SD Image of full scene")
 
                 # Stable Diffusion
                 desc_sd = process_features_and_mask(self.model_sd, self.aug_sd, img_sd, input_text=None, mask=False, pca=True).reshape(
@@ -121,34 +140,32 @@ class ZS6DSdDino:
 
             template = Image.open(self.templates_gt[obj_id][matched_templates[0][1]]['img_crop'])
 
+            show_debug_image(np.array(template), "Matched Template")
+
+
             with torch.no_grad():
+                """
                 if img_crop.size[0] < self.max_crop_size:
-                    crop_size = img_crop.size[0] #crop_size = 184
+                    crop_size = img_crop.size[0] #crop_size = 37
                 else:
                     crop_size = self.max_crop_size
 
                 resize_factor = float(crop_size) / img_crop.size[0] #rezise_factor = 1.0
+                """
 
                 #img_crop = Image.fromarray(img_prep.squeeze().cpu().numpy())
 
                 """ Find Correspondences """
-                input_image = img_base
+                input_image = img_base # size 37x37
                 input_pil = img_prep
-                template_image = template
+                template_image = template # size 840x840
                 template_pil, _, _ = self.extractor.preprocess(template_image, load_size=self.image_size_dino)
 
-                # v7 and v6 are valid but wrong results
-                #points1, points2, crop_pil, template_pil = self.extractor.find_correspondences_nearest_neighbor_sd_dino(self.image_size_sd, self.model_sd, self.aug_sd, num_patches, input_image, input_pil,
-                #                                                                                          template_image, template_pil,
-                #                                                                                          num_pairs=20,
-                #                                                                                          load_size=self.image_size_dino)
-
-                #crop_size = self.image_size_dino
 
 
                 points1, points2, crop_pil, template_pil = self.extractor.find_correspondences_fastkmeans_sd_dino( input_image, input_pil, template_image, template_pil, num_patches, self.model_sd, self.aug_sd, self.image_size_sd,
                                                                                                           num_pairs=20,
-                                                                                                          load_size=crop_size)
+                                                                                                          load_size=self.image_size_dino)
 
                 if not points1 or not points2:
                     raise ValueError("Insufficient correspondences found.")
@@ -157,8 +174,69 @@ class ZS6DSdDino:
                     f"{self.templates_gt[obj_id][matched_templates[0][1]]['img_crop'].split('.png')[0]}_uv.npy")
                 img_uv = img_uv.astype(np.uint8)
 
-                """TODO: Check if rezising is correct"""
-                img_uv = cv2.resize(img_uv, (self.image_size_dino, self.image_size_dino))
+                show_debug_image(img_uv, "Original UV Image")
+
+                """TODO: Check if rezising is correct
+                # resizing of points1 and points2
+
+                # resizing of img_uv
+                crop_size = img_crop.size[0]
+
+                # Calculate the scaling factor
+                scale_factor = crop_size / self.image_size_dino
+
+                # Scale the points
+                points1 = [(int(y * scale_factor), int(x * scale_factor)) for y, x in points1]
+                points2 = [(int(y * scale_factor), int(x * scale_factor)) for y, x in points2]
+
+                img_uv = cv2.resize(img_uv, (crop_size, crop_size))
+                """
+
+                crop_size = img_crop.size[0]
+
+                def scale_points(points, original_size, new_size, num_patches, stride):
+                    scale_factor = new_size / original_size
+                    patch_size = original_size // num_patches
+                    scaled_points = []
+                    for y, x in points:
+                        # Convert patch coordinates to pixel coordinates
+                        y_pixel = y * stride + patch_size // 2
+                        x_pixel = x * stride + patch_size // 2
+
+                        # Scale the pixel coordinates
+                        y_scaled = y_pixel * scale_factor
+                        x_scaled = x_pixel * scale_factor
+
+                        scaled_points.append((y_scaled, x_scaled))
+                    return scaled_points
+
+                # Calculate the scaling factor
+                scale_factor = crop_size / self.image_size_dino
+
+                # Scale points1 and points2
+                points1 = scale_points(points1, self.image_size_dino, crop_size, num_patches, self.stride)
+                points2 = scale_points(points2, self.image_size_dino, crop_size, num_patches, self.stride)
+
+                # Resize img_uv to match the crop size
+                img_uv = cv2.resize(img_uv, (crop_size, crop_size))
+
+                """
+                # Adjust camera matrix for the new image size
+                cam_K_scaled = cam_K.copy()
+                cam_K_scaled[0, 0] *= scale_factor
+                cam_K_scaled[1, 1] *= scale_factor
+                cam_K_scaled[0, 2] *= scale_factor
+                cam_K_scaled[1, 2] *= scale_factor
+                """
+
+                # Scale offsets
+                y_offset = y_offset * scale_factor
+                x_offset = x_offset * scale_factor
+
+                # set resizing_factor
+                resize_factor = 1
+
+                show_debug_image(img_uv, "Resized UV Image")
 
                 R_est, t_est = utils.get_pose_from_correspondences(points1, points2,
                                                                    y_offset, x_offset,
