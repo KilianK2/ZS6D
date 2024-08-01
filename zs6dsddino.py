@@ -144,16 +144,6 @@ class ZS6DSdDino:
 
 
             with torch.no_grad():
-                """
-                if img_crop.size[0] < self.max_crop_size:
-                    crop_size = img_crop.size[0] #crop_size = 37
-                else:
-                    crop_size = self.max_crop_size
-
-                resize_factor = float(crop_size) / img_crop.size[0] #rezise_factor = 1.0
-                """
-
-                #img_crop = Image.fromarray(img_prep.squeeze().cpu().numpy())
 
                 """ Find Correspondences """
                 input_image = img_base # size 37x37
@@ -162,8 +152,8 @@ class ZS6DSdDino:
                 template_pil, _, _ = self.extractor.preprocess(template_image, load_size=self.image_size_dino)
 
 
-
-                points1, points2, crop_pil, template_pil = self.extractor.find_correspondences_fastkmeans_sd_dino( input_image, input_pil, template_image, template_pil, num_patches, self.model_sd, self.aug_sd, self.image_size_sd,
+                # version 5 was good
+                points1, points2, crop_pil, template_pil = self.extractor.find_correspondences_fastkmeans_sd_dino_v5( input_image, input_pil, template_image, template_pil, num_patches, self.model_sd, self.aug_sd, self.image_size_sd,
                                                                                                           num_pairs=20,
                                                                                                           load_size=self.image_size_dino)
 
@@ -176,7 +166,7 @@ class ZS6DSdDino:
 
                 show_debug_image(img_uv, "Original UV Image")
 
-                """TODO: Check if rezising is correct
+                """TODO: Check if resizing is correct """
                 # resizing of points1 and points2
 
                 # resizing of img_uv
@@ -190,53 +180,12 @@ class ZS6DSdDino:
                 points2 = [(int(y * scale_factor), int(x * scale_factor)) for y, x in points2]
 
                 img_uv = cv2.resize(img_uv, (crop_size, crop_size))
-                """
 
-                crop_size = img_crop.size[0]
 
-                def scale_points(points, original_size, new_size, num_patches, stride):
-                    scale_factor = new_size / original_size
-                    patch_size = original_size // num_patches
-                    scaled_points = []
-                    for y, x in points:
-                        # Convert patch coordinates to pixel coordinates
-                        y_pixel = y * stride + patch_size // 2
-                        x_pixel = x * stride + patch_size // 2
-
-                        # Scale the pixel coordinates
-                        y_scaled = y_pixel * scale_factor
-                        x_scaled = x_pixel * scale_factor
-
-                        scaled_points.append((y_scaled, x_scaled))
-                    return scaled_points
-
-                # Calculate the scaling factor
-                scale_factor = crop_size / self.image_size_dino
-
-                # Scale points1 and points2
-                points1 = scale_points(points1, self.image_size_dino, crop_size, num_patches, self.stride)
-                points2 = scale_points(points2, self.image_size_dino, crop_size, num_patches, self.stride)
-
-                # Resize img_uv to match the crop size
-                img_uv = cv2.resize(img_uv, (crop_size, crop_size))
-
-                """
-                # Adjust camera matrix for the new image size
-                cam_K_scaled = cam_K.copy()
-                cam_K_scaled[0, 0] *= scale_factor
-                cam_K_scaled[1, 1] *= scale_factor
-                cam_K_scaled[0, 2] *= scale_factor
-                cam_K_scaled[1, 2] *= scale_factor
-                """
-
-                # Scale offsets
-                y_offset = y_offset * scale_factor
-                x_offset = x_offset * scale_factor
-
-                # set resizing_factor
-                resize_factor = 1
 
                 show_debug_image(img_uv, "Resized UV Image")
+
+                resize_factor = 1
 
                 R_est, t_est = utils.get_pose_from_correspondences(points1, points2,
                                                                    y_offset, x_offset,
