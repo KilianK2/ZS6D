@@ -24,3 +24,4 @@ test/lmo_test_bop19/000002
 test/ycbv_test_bop19/*
 test/*
 test/lmo_test_bop19/test/000002/*
+bop_toolkit_lib/*
