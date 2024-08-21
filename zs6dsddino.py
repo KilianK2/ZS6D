@@ -152,10 +152,16 @@ class ZS6DSdDino:
                 template_pil, _, _ = self.extractor.preprocess(template_image, load_size=self.image_size_dino)
 
 
-                # version 5 was good
-                points1, points2, crop_pil, template_pil = self.extractor.find_correspondences_fastkmeans_sd_dino_v5( input_image, input_pil, template_image, template_pil, num_patches, self.model_sd, self.aug_sd, self.image_size_sd,
-                                                                                                          num_pairs=20,
-                                                                                                          load_size=self.image_size_dino)
+                # working version = 5
+                crop_size = img_crop.size[0]
+
+                # Calculate the scaling factor
+                scale_factor = crop_size / self.image_size_dino
+
+
+
+                points1, points2, crop_pil, template_pil = self.extractor.find_correspondences_fastkmeans_sd_dino_v5( input_image, input_pil, template_image, template_pil, num_patches, self.model_sd, self.aug_sd, self.image_size_sd, scale_factor,
+                                                                                                          num_pairs=20)
 
                 if not points1 or not points2:
                     raise ValueError("Insufficient correspondences found.")
@@ -166,26 +172,16 @@ class ZS6DSdDino:
 
                 show_debug_image(img_uv, "Original UV Image")
 
-                """TODO: Check if resizing is correct """
-                # resizing of points1 and points2
 
                 # resizing of img_uv
-                crop_size = img_crop.size[0]
-
-                # Calculate the scaling factor
-                scale_factor = crop_size / self.image_size_dino
-
-                # Scale the points
-                points1 = [(int(y * scale_factor), int(x * scale_factor)) for y, x in points1]
-                points2 = [(int(y * scale_factor), int(x * scale_factor)) for y, x in points2]
-
                 img_uv = cv2.resize(img_uv, (crop_size, crop_size))
 
 
 
                 show_debug_image(img_uv, "Resized UV Image")
 
-                resize_factor = 1
+                resize_factor = float(crop_size) / img_crop.size[0]
+                print("resize_factor = " + str(resize_factor))
 
                 R_est, t_est = utils.get_pose_from_correspondences(points1, points2,
                                                                    y_offset, x_offset,

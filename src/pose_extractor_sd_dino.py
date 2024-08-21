@@ -660,7 +660,7 @@ class PoseViTExtractorSdDino(PoseViTExtractor):
 
     def find_correspondences_fastkmeans_sd_dino_v5(self, input_image, input_pil, template_image, template_pil,
                                                    num_patches,
-                                                   model_sd, aug_sd, image_size_sd, num_pairs: int = 10, load_size: int = 840,
+                                                   model_sd, aug_sd, image_size_sd, scale_factor, num_pairs: int = 10,
                                                    layer: int = 11, facet: str = 'token') -> Tuple[
         List[Tuple[float, float]], List[Tuple[float, float]], Image.Image, Image.Image]:
 
@@ -710,7 +710,8 @@ class PoseViTExtractorSdDino(PoseViTExtractor):
         sim_1, nn_1 = sim_1[0, 0], nn_1[0, 0]
         sim_2, nn_2 = sim_2[0, 0], nn_2[0, 0]
 
-        bbs_mask = nn_2[nn_1] == torch.arange(num_patches1[0] * num_patches1[1], device=self.device)
+        bbs_mask = (nn_2[nn_1] == torch.arange(num_patches1[0] * num_patches1[1], device=self.device))
+
 
         # Select best buddy descriptors
         bb_descs1 = descriptors1[0, 0, bbs_mask, :]
@@ -751,6 +752,9 @@ class PoseViTExtractorSdDino(PoseViTExtractor):
             points1.append((y1_show, x1_show))
             points2.append((y2_show, x2_show))
 
+        # Scale the points
+        points1 = [(int(y * scale_factor), int(x * scale_factor)) for y, x in points1]
+        points2 = [(int(y * scale_factor), int(x * scale_factor)) for y, x in points2]
         end_time_bb = time.time()
         end_time_corr = time.time()
         elapsed_bb = end_time_bb - start_time_bb
