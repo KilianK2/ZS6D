@@ -168,11 +168,8 @@ if __name__ == "__main__":
                         """SD-DINO"""
 
                         img_base = Image.fromarray(img_crop_raw).convert('RGB')
-
-
                         # Resizing
                         img_sd = resize(img_base, image_size_sd, resize=True, to_pil=True, edge=False)
-
                         # Stable Diffusion
                         desc_sd = process_features_and_mask(model_sd, aug_sd, img_sd, input_text=None, mask=False,
                                                             pca=True).reshape(1, 1, -1, num_patches ** 2).permute(0, 1,
@@ -229,18 +226,21 @@ if __name__ == "__main__":
 
                     try:
                         with torch.no_grad():
-                            input_image = img_data.crops[i]
-                            input_pil, _, _ = extractor.preprocess(input_image, load_size=image_size_dino)
+                            cropped_image = img_data.crops[i]
+                            cropped_pil, _, _ = extractor.preprocess(cropped_image, load_size=image_size_dino)
                             template_image = template
                             template_pil, _, _ = extractor.preprocess(template_image, load_size=image_size_dino)
 
                             crop_size = img_data.crops[i].size[0]
                             scale_factor = crop_size / image_size_dino
-                            print("load_size=img_data.crops[i].size[0] is equal to " + str(img_data.crops[i].size[0]) + " should it be image_size_dino = 840")
-                            points1, points2, crop_pil, template_pil = extractor.find_correspondences_fastkmeans_sd_dino_v5(
-                                input_image, input_pil, template_image, template_pil, num_patches, model_sd,
-                                aug_sd, image_size_sd, scale_factor = scale_factor,
-                                num_pairs=20)
+                            points1, points2, crop_pil, template_pil = extractor.find_correspondences_sd_dino_own7(
+                                cropped_image, cropped_pil, template_image, template_pil, model_sd, aug_sd,
+                                image_size_sd, scale_factor, num_patches, num_pairs=20)
+
+                            #points1, points2, crop_pil, template_pil = extractor.find_correspondences_fastkmeans_sd_dino_v5(
+                            #    input_image, input_pil, template_image, template_pil, num_patches, model_sd,
+                            #    aug_sd, image_size_sd, scale_factor=scale_factor,
+                            #    num_pairs=20)
 
                     except Exception as e:
                         logging.error(

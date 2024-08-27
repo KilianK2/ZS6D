@@ -1,3 +1,5 @@
+import cv2
+from matplotlib import pyplot as plt
 from torch import nn
 from torchvision import transforms
 #import src.extractor as extractor
@@ -10,14 +12,18 @@ import time
 #import zs6d_sd_dino.sd_dino.extractor_dino as extractor
 from external.kmeans_pytorch.kmeans_pytorch import kmeans
 from external.sd_dino.extractor_sd import process_features_and_mask, get_mask
-from external.sd_dino.utils.utils_correspondence import resize
+from external.sd_dino.utils.utils_correspondence import resize, find_nearest_patchs
 import torch.nn.functional as F
 #from ZS6D.src import extractor
 #import src.extractor as extractor
 from external.sd_dino.extractor_dino import ViTExtractor
 from src.pose_extractor import PoseViTExtractor
 import torch
-
+import math
+from scipy.optimize import linear_sum_assignment
+from tqdm import tqdm
+from sklearn.decomposition import PCA
+import seaborn as sns
 
 class PoseViTExtractorSdDino(PoseViTExtractor):
 
@@ -658,6 +664,1011 @@ class PoseViTExtractorSdDino(PoseViTExtractor):
 
         return points1, points2, input_pil, template_pil
 
+    def find_correspondences_sd_dino_own8(self, cropped_image, cropped_pil, template_image, template_pil,
+                                          model_sd, aug_sd, image_size_sd, scale_factor, num_patches,
+                                          num_pairs: int = 20, layer: int = 11, facet: str = 'token') -> Tuple[
+        List[Tuple[float, float]], List[Tuple[float, float]], Image.Image, Image.Image]:
+
+        with torch.no_grad():
+            # Extract features for cropped image
+            img_sd1 = resize(cropped_image, image_size_sd, resize=True, to_pil=True, edge=False)
+            desc_sd1 = process_features_and_mask(model_sd, aug_sd, img_sd1, input_text=None, mask=False,
+                                                 pca=True).reshape(1, 1, -1, num_patches ** 2).permute(0, 1, 3, 2)
+            desc_dino1 = self.extract_descriptors(cropped_pil.to(self.device), layer, facet)
+            desc_sd1 = desc_sd1 / desc_sd1.norm(dim=-1, keepdim=True)
+            desc_dino1 = desc_dino1 / desc_dino1.norm(dim=-1, keepdim=True)
+            cropped_image_desc = torch.cat((desc_sd1, desc_dino1), dim=-1)
+
+            # Extract features for template image
+            img_sd2 = resize(template_image, image_size_sd, resize=True, to_pil=True, edge=False)
+            desc_sd2 = process_features_and_mask(model_sd, aug_sd, img_sd2, input_text=None, mask=False,
+                                                 pca=True).reshape(1, 1, -1, num_patches ** 2).permute(0, 1, 3, 2)
+            desc_dino2 = self.extract_descriptors(template_pil.to(self.device), layer, facet)
+            desc_sd2 = desc_sd2 / desc_sd2.norm(dim=-1, keepdim=True)
+            desc_dino2 = desc_dino2 / desc_dino2.norm(dim=-1, keepdim=True)
+            template_image_desc = torch.cat((desc_sd2, desc_dino2), dim=-1)
+
+        # Reshape descriptors for correspondence finding
+        src_features = template_image_desc.squeeze().permute(1, 0)  # (num_patches^2, feature_dim)
+        tgt_features = cropped_image_desc.squeeze().permute(1, 0)  # (num_patches^2, feature_dim)
+
+        # Find the best correspondences
+        best_matches = []
+        for patch_idx in tqdm(range(num_patches * num_patches)):
+            distances = torch.linalg.norm(tgt_features - src_features[patch_idx], dim=1)
+            tgt_patch_idx = torch.argmin(distances)
+            best_matches.append((patch_idx, tgt_patch_idx.item(), distances[tgt_patch_idx].item()))
+
+        # Sort matches by distance (lowest to highest)
+        best_matches.sort(key=lambda x: x[2])
+
+        # Initialize lists to store correspondences
+        points1 = []  # For cropped image
+        points2 = []  # For template image
+
+        for src_idx, tgt_idx, _ in best_matches[:num_pairs]:
+            src_y = src_idx // num_patches
+            src_x = src_idx % num_patches
+            tgt_y = tgt_idx // num_patches
+            tgt_x = tgt_idx % num_patches
+
+            # Convert patch coordinates to pixel coordinates
+            x1_show = tgt_x * self.stride[1] + self.p // 2
+            y1_show = tgt_y * self.stride[0] + self.p // 2
+            x2_show = src_x * self.stride[1] + self.p // 2
+            y2_show = src_y * self.stride[0] + self.p // 2
+
+            # Scale the points
+            x1_scaled = int(x1_show * scale_factor)
+            y1_scaled = int(y1_show * scale_factor)
+            x2_scaled = int(x2_show * scale_factor)
+            y2_scaled = int(y2_show * scale_factor)
+
+            points1.append((x1_scaled, y1_scaled))
+            points2.append((x2_scaled, y2_scaled))
+
+        return points1, points2, cropped_image, template_image
+
+    def find_correspondences_sd_dino_own7(self, cropped_image, cropped_pil, template_image, template_pil,
+                                          model_sd, aug_sd, image_size_sd, scale_factor, num_patches,
+                                          num_pairs: int = 20, layer: int = 11, facet: str = 'token') -> Tuple[
+        List[Tuple[float, float]], List[Tuple[float, float]], Image.Image, Image.Image]:
+
+        with torch.no_grad():
+            # Extract features for cropped image
+            img_sd1 = resize(cropped_image, image_size_sd, resize=True, to_pil=True, edge=False)
+            desc_sd1 = process_features_and_mask(model_sd, aug_sd, img_sd1, input_text=None, mask=False,
+                                                 pca=True).reshape(1, 1, -1, num_patches ** 2).permute(0, 1, 3, 2)
+            desc_dino1 = self.extract_descriptors(cropped_pil.to(self.device), layer, facet)
+            desc_sd1 = desc_sd1 / desc_sd1.norm(dim=-1, keepdim=True)
+            desc_dino1 = desc_dino1 / desc_dino1.norm(dim=-1, keepdim=True)
+            cropped_image_desc = torch.cat((desc_sd1, desc_dino1), dim=-1)
+
+            # Extract features for template image
+            img_sd2 = resize(template_image, image_size_sd, resize=True, to_pil=True, edge=False)
+            desc_sd2 = process_features_and_mask(model_sd, aug_sd, img_sd2, input_text=None, mask=False,
+                                                 pca=True).reshape(1, 1, -1, num_patches ** 2).permute(0, 1, 3, 2)
+            desc_dino2 = self.extract_descriptors(template_pil.to(self.device), layer, facet)
+            desc_sd2 = desc_sd2 / desc_sd2.norm(dim=-1, keepdim=True)
+            desc_dino2 = desc_dino2 / desc_dino2.norm(dim=-1, keepdim=True)
+            template_image_desc = torch.cat((desc_sd2, desc_dino2), dim=-1)
+
+        # Reshape descriptors for correspondence finding
+        src_features = template_image_desc.squeeze().permute(1, 0)  # (num_patches^2, feature_dim)
+        tgt_features = cropped_image_desc.squeeze().permute(1, 0)  # (num_patches^2, feature_dim)
+
+        # Find the best correspondences
+        distances = torch.cdist(src_features, tgt_features)
+        src_to_tgt_indices = torch.argmin(distances, dim=1)
+        best_distances = torch.gather(distances, 1, src_to_tgt_indices.unsqueeze(1)).squeeze()
+
+        # Sort matches by distance (lowest to highest)
+        sorted_indices = torch.argsort(best_distances)
+        best_matches = [(idx.item(), src_to_tgt_indices[idx].item(), best_distances[idx].item()) for idx in
+                        sorted_indices[:num_pairs]]
+
+        # Initialize lists to store correspondences
+        points1 = []  # For cropped image
+        points2 = []  # For template image
+
+        for src_idx, tgt_idx, _ in best_matches:
+            src_y = src_idx // num_patches
+            src_x = src_idx % num_patches
+            tgt_y = tgt_idx // num_patches
+            tgt_x = tgt_idx % num_patches
+
+            # Convert patch coordinates to pixel coordinates
+            x1_show = tgt_x * self.stride[1] + self.p // 2
+            y1_show = tgt_y * self.stride[0] + self.p // 2
+            x2_show = src_x * self.stride[1] + self.p // 2
+            y2_show = src_y * self.stride[0] + self.p // 2
+
+            # Scale the points
+            x1_scaled = int(x1_show * scale_factor)
+            y1_scaled = int(y1_show * scale_factor)
+            x2_scaled = int(x2_show * scale_factor)
+            y2_scaled = int(y2_show * scale_factor)
+
+            points1.append((x1_scaled, y1_scaled))
+            points2.append((x2_scaled, y2_scaled))
+
+        return points1, points2, cropped_image, template_image
+
+
+    def find_correspondences_sd_dino_own6(self, cropped_image, cropped_pil, template_image, template_pil,
+                                          model_sd, aug_sd, image_size_sd, scale_factor, num_patches,
+                                          num_pairs: int = 20, layer: int = 11, facet: str = 'token') -> Tuple[
+        List[Tuple[float, float]], List[Tuple[float, float]], Image.Image, Image.Image]:
+
+        def visualize_feature_map(feature_map, title="Feature Map", cmap='viridis', normalize=False):
+            if isinstance(feature_map, torch.Tensor):
+                feature_map = feature_map.squeeze().cpu().numpy()
+            elif not isinstance(feature_map, np.ndarray):
+                raise TypeError("feature_map must be a torch.Tensor or np.ndarray")
+
+            if feature_map.ndim not in [2, 3]:
+                raise ValueError("feature_map must be 2D or 3D")
+
+            if feature_map.ndim == 3:
+                feature_map = np.mean(feature_map, axis=0)
+
+            if normalize:
+                feature_map = (feature_map - feature_map.min()) / (feature_map.max() - feature_map.min())
+
+            plt.figure(figsize=(10, 8))
+            im = plt.imshow(feature_map, cmap=cmap)
+            plt.title(title)
+            plt.colorbar(im)
+            plt.axis('off')
+            plt.show()
+
+            return feature_map
+
+        def visualize_mask_and_image(image, mask, title="Image and Mask Visualization"):
+            # Convert image to numpy array if it's a PIL Image
+            if isinstance(image, Image.Image):
+                image = np.array(image)
+
+            # Ensure the mask is a numpy array
+            if isinstance(mask, torch.Tensor):
+                mask = mask.cpu().numpy()
+
+            # If the image is a torch tensor, convert it to numpy
+            if isinstance(image, torch.Tensor):
+                image = image.permute(1, 2, 0).cpu().numpy()
+
+            # If the image has values > 1, assume it's in the range [0, 255] and convert to [0, 1]
+            if image.dtype == np.uint8:
+                image = image.astype(np.float32) / 255.0
+            elif image.max() > 1:
+                image = image / 255.0
+
+            # Create a figure with two subplots side by side
+            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 6))
+
+            # Plot the original image
+            ax1.imshow(image)
+            ax1.set_title("Original Image")
+            ax1.axis('off')
+
+            # Plot the mask
+            mask_img = ax2.imshow(mask, cmap='viridis')
+            ax2.set_title("Generated Mask")
+            ax2.axis('off')
+
+            # Add a colorbar to the mask plot
+            plt.colorbar(mask_img, ax=ax2, fraction=0.046, pad=0.04)
+
+            # Set the main title for the entire figure
+            fig.suptitle(title, fontsize=16)
+
+            # Adjust the layout and display the plot
+            plt.tight_layout()
+            plt.show()
+
+        # points1 for cropped image -> target_image here
+        # points2 for template image -> src_image here
+
+        start_time_corr = time.time()
+        with torch.no_grad():
+            # Extract features for cropped image
+            img_sd1 = resize(cropped_image, image_size_sd, resize=True, to_pil=True, edge=False)
+            desc_sd1 = process_features_and_mask(model_sd, aug_sd, img_sd1, input_text=None, mask=False,
+                                                 pca=True).reshape(1, 1, -1, num_patches ** 2).permute(0, 1, 3, 2)
+            desc_dino1 = self.extract_descriptors(cropped_pil.to(self.device), layer, facet)
+            desc_sd1 = desc_sd1 / desc_sd1.norm(dim=-1, keepdim=True)
+            desc_dino1 = desc_dino1 / desc_dino1.norm(dim=-1, keepdim=True)
+            cropped_image_desc = torch.cat((desc_sd1, desc_dino1), dim=-1)
+
+            # Extract features for template image
+            img_sd2 = resize(template_image, image_size_sd, resize=True, to_pil=True, edge=False)
+            desc_sd2 = process_features_and_mask(model_sd, aug_sd, img_sd2, input_text=None, mask=False,
+                                                 pca=True).reshape(1, 1, -1, num_patches ** 2).permute(0, 1, 3, 2)
+            desc_dino2 = self.extract_descriptors(template_pil.to(self.device), layer, facet)
+            desc_sd2 = desc_sd2 / desc_sd2.norm(dim=-1, keepdim=True)
+            desc_dino2 = desc_dino2 / desc_dino2.norm(dim=-1, keepdim=True)
+            template_image_desc = torch.cat((desc_sd2, desc_dino2), dim=-1)
+
+            # Get masks
+            mask_cropped = get_mask(model_sd, aug_sd, cropped_image)
+            mask_template = get_mask(model_sd, aug_sd, template_image)
+
+        visualize_mask_and_image(cropped_image, mask_cropped, "Cropped Image and Its Mask")
+
+
+        tgt_feature_reshaped = cropped_image_desc.squeeze().permute(1, 0).reshape(1, -1, 60, 60).cuda()
+        src_feature_reshaped = template_image_desc.squeeze().permute(1, 0).reshape(1, -1, 60, 60).cuda()
+
+        patch_size = 128 # the resolution of the output image, set to 256 could be faster
+
+        resized_tgt_mask = F.interpolate(mask_cropped.unsqueeze(0).unsqueeze(0), size=(patch_size, patch_size),
+                                         mode='nearest').squeeze().cuda()
+        resized_src_mask = F.interpolate(mask_template.unsqueeze(0).unsqueeze(0), size=(patch_size, patch_size),
+                                         mode='nearest').squeeze().cuda()
+        src_feature_upsampled = F.interpolate(src_feature_reshaped, size=(patch_size, patch_size),
+                                              mode='bilinear').squeeze()
+        tgt_feature_upsampled = F.interpolate(tgt_feature_reshaped, size=(patch_size, patch_size),
+                                              mode='bilinear').squeeze()
+
+        # mask the feature
+        src_feature_upsampled = src_feature_upsampled * resized_src_mask.repeat(src_feature_upsampled.shape[0], 1, 1)
+        tgt_feature_upsampled = tgt_feature_upsampled * resized_tgt_mask.repeat(src_feature_upsampled.shape[0], 1, 1)
+        # Set the masked area to a very small number
+        src_feature_upsampled[src_feature_upsampled == 0] = -100000
+        tgt_feature_upsampled[tgt_feature_upsampled == 0] = -100000
+
+
+        # Calculate the cosine similarity between src_feature and tgt_feature
+        src_features_2d = src_feature_upsampled.reshape(src_feature_upsampled.shape[0], -1).permute(1, 0)
+        tgt_features_2d = tgt_feature_upsampled.reshape(tgt_feature_upsampled.shape[0], -1).permute(1, 0)
+
+        visualize_feature_map(src_feature_reshaped, title="Source Feature Map")
+        visualize_feature_map(tgt_feature_reshaped, title="Target Feature Map")
+
+        # Find the best correspondences
+        best_matches = []
+        for patch_idx in tqdm(range(patch_size * patch_size)):
+            if resized_src_mask[patch_idx // patch_size, patch_idx % patch_size] == 1:
+                distances = torch.linalg.norm(tgt_features_2d - src_features_2d[patch_idx], dim=1)
+                tgt_patch_idx = torch.argmin(distances)
+                best_matches.append((patch_idx, tgt_patch_idx.item(), distances[tgt_patch_idx].item()))
+
+        # Sort matches by distance (lowest to highest)
+        best_matches.sort(key=lambda x: x[2])
+
+        # Initialize lists to store correspondences
+        points1 = []  # For cropped image
+        points2 = []  # For template image
+
+        for src_idx, tgt_idx, _ in best_matches[:num_pairs]:
+            src_y = src_idx // patch_size
+            src_x = src_idx % patch_size
+            tgt_y = tgt_idx // patch_size
+            tgt_x = tgt_idx % patch_size
+
+            # Convert patch coordinates to pixel coordinates
+            x1_show = (int(tgt_x) - 1) * self.stride[1] + self.stride[1] + self.p // 2
+            y1_show = (int(tgt_y) - 1) * self.stride[0] + self.stride[0] + self.p // 2
+            x2_show = (int(src_x) - 1) * self.stride[1] + self.stride[1] + self.p // 2
+            y2_show = (int(src_y) - 1) * self.stride[0] + self.stride[0] + self.p // 2
+
+            # Scale the points
+            x1_scaled = int(x1_show * scale_factor)
+            y1_scaled = int(y1_show * scale_factor)
+            x2_scaled = int(x2_show * scale_factor)
+            y2_scaled = int(y2_show * scale_factor)
+
+            points1.append((x1_scaled, y1_scaled))
+            points2.append((x2_scaled, y2_scaled))
+
+        return points1, points2, cropped_image, template_image
+
+
+    def find_correspondences_sd_dino_own5(self, cropped_image, cropped_pil, template_image, template_pil,
+                                          model_sd, aug_sd, image_size_sd, scale_factor, num_patches,
+                                          num_pairs: int = 20, layer: int = 11, facet: str = 'token') -> Tuple[
+        List[Tuple[float, float]], List[Tuple[float, float]], Image.Image, Image.Image]:
+
+        start_time_corr = time.time()
+        with torch.no_grad():
+            # Extract features for cropped image
+            img_sd1 = resize(cropped_image, image_size_sd, resize=True, to_pil=True, edge=False)
+            desc_sd1 = process_features_and_mask(model_sd, aug_sd, img_sd1, input_text=None, mask=False,
+                                                 pca=True).reshape(1, 1, -1, num_patches ** 2).permute(0, 1, 3, 2)
+            desc_dino1 = self.extract_descriptors(cropped_pil.to(self.device), layer, facet)
+            desc_sd1 = desc_sd1 / desc_sd1.norm(dim=-1, keepdim=True)
+            desc_dino1 = desc_dino1 / desc_dino1.norm(dim=-1, keepdim=True)
+            cropped_image_desc = torch.cat((desc_sd1, desc_dino1), dim=-1)
+
+            # Extract features for template image
+            img_sd2 = resize(template_image, image_size_sd, resize=True, to_pil=True, edge=False)
+            desc_sd2 = process_features_and_mask(model_sd, aug_sd, img_sd2, input_text=None, mask=False,
+                                                 pca=True).reshape(1, 1, -1, num_patches ** 2).permute(0, 1, 3, 2)
+            desc_dino2 = self.extract_descriptors(template_pil.to(self.device), layer, facet)
+            desc_sd2 = desc_sd2 / desc_sd2.norm(dim=-1, keepdim=True)
+            desc_dino2 = desc_dino2 / desc_dino2.norm(dim=-1, keepdim=True)
+            template_image_desc = torch.cat((desc_sd2, desc_dino2), dim=-1)
+
+            # Get masks
+            mask_cropped = get_mask(model_sd, aug_sd, cropped_image)
+            mask_template = get_mask(model_sd, aug_sd, template_image)
+
+
+        src_feature_reshaped = cropped_image_desc.squeeze().permute(1, 0).reshape(1, -1, 60, 60).cuda()
+        tgt_feature_reshaped = template_image_desc.squeeze().permute(1, 0).reshape(1, -1, 60, 60).cuda()
+        #src_img = Image.open(trg_img_path)
+        #tgt_img = Image.open(src_img_path)
+
+        patch_size = 256  # the resolution of the output image, set to 256 could be faster
+
+        src_img = resize(cropped_image, patch_size, resize=True, to_pil=False, edge=False)
+        tgt_img = resize(template_image, patch_size, resize=True, to_pil=False, edge=False)
+        resized_src_mask = F.interpolate(mask_cropped.unsqueeze(0).unsqueeze(0), size=(patch_size, patch_size),
+                                         mode='nearest').squeeze().cuda()
+        resized_tgt_mask = F.interpolate(mask_template.unsqueeze(0).unsqueeze(0), size=(patch_size, patch_size),
+                                         mode='nearest').squeeze().cuda()
+        src_feature_upsampled = F.interpolate(src_feature_reshaped, size=(patch_size, patch_size),
+                                              mode='bilinear').squeeze()
+        tgt_feature_upsampled = F.interpolate(tgt_feature_reshaped, size=(patch_size, patch_size),
+                                              mode='bilinear').squeeze()
+        # mask the feature
+        src_feature_upsampled = src_feature_upsampled * resized_src_mask.repeat(src_feature_upsampled.shape[0], 1, 1)
+        tgt_feature_upsampled = tgt_feature_upsampled * resized_tgt_mask.repeat(src_feature_upsampled.shape[0], 1, 1)
+        # Set the masked area to a very small number
+        src_feature_upsampled[src_feature_upsampled == 0] = -100000
+        tgt_feature_upsampled[tgt_feature_upsampled == 0] = -100000
+        # Calculate the cosine similarity between src_feature and tgt_feature
+        src_features_2d = src_feature_upsampled.reshape(src_feature_upsampled.shape[0], -1).permute(1, 0)
+        tgt_features_2d = tgt_feature_upsampled.reshape(tgt_feature_upsampled.shape[0], -1).permute(1, 0)
+        swapped_image = src_img
+        mapping = torch.zeros(patch_size, patch_size, 2).cuda()
+        for patch_idx in tqdm(range(patch_size * patch_size)):
+            # If the patch is in the resized_src_mask_out_layers, find the corresponding patch in the target_output
+            if resized_src_mask[patch_idx // patch_size, patch_idx % patch_size] == 1:
+                # Find the corresponding patch with the highest cosine similarity
+                distances = torch.linalg.norm(tgt_features_2d - src_features_2d[patch_idx], dim=1)
+                tgt_patch_idx = torch.argmin(distances)
+
+                tgt_patch_row = tgt_patch_idx // patch_size
+                tgt_patch_col = tgt_patch_idx % patch_size
+
+        # Initialize lists to store correspondences
+        points1 = []  # For cropped image
+        points2 = []  # For template image
+
+        # Find the best correspondences
+        best_matches = []
+        for patch_idx in tqdm(range(patch_size * patch_size)):
+            if resized_src_mask[patch_idx // patch_size, patch_idx % patch_size] == 1:
+                distances = torch.linalg.norm(tgt_features_2d - src_features_2d[patch_idx], dim=1)
+                tgt_patch_idx = torch.argmin(distances)
+                best_matches.append((patch_idx, tgt_patch_idx.item(), distances[tgt_patch_idx].item()))
+
+        # Sort matches by distance (lower is better) and select top num_pairs
+        best_matches.sort(key=lambda x: x[2])
+        selected_matches = best_matches[:num_pairs]
+
+        # Convert patch indices to image coordinates
+        for src_idx, tgt_idx, _ in selected_matches:
+            # Source (cropped) image coordinates
+            src_y, src_x = src_idx // patch_size, src_idx % patch_size
+            # Target (template) image coordinates
+            tgt_y, tgt_x = tgt_idx // patch_size, tgt_idx % patch_size
+
+            # Convert to original image coordinates
+            x1_show = int(src_x * self.stride[1] + self.stride[1] + self.p // 2)
+            y1_show = int(src_y * self.stride[0] + self.stride[0] + self.p // 2)
+            x2_show = int(tgt_x * self.stride[1] + self.stride[1] + self.p // 2)
+            y2_show = int(tgt_y * self.stride[0] + self.stride[0] + self.p // 2)
+
+            points1.append((y1_show, x1_show))
+            points2.append((y2_show, x2_show))
+
+            # Scale the points
+            points1 = [(int(y * scale_factor), int(x * scale_factor)) for y, x in points1]
+            points2 = [(int(y * scale_factor), int(x * scale_factor)) for y, x in points2]
+
+        # Reshape descriptors and masks
+        cropped_desc = cropped_image_desc.squeeze().permute(1, 0).reshape(-1, num_patches, num_patches)
+        template_desc = template_image_desc.squeeze().permute(1, 0).reshape(-1, num_patches, num_patches)
+
+        # Resize masks to match descriptor size
+        mask_cropped = F.interpolate(mask_cropped.unsqueeze(0).unsqueeze(0).float(), size=(num_patches, num_patches),
+                                     mode='nearest').squeeze()
+        mask_template = F.interpolate(mask_template.unsqueeze(0).unsqueeze(0).float(), size=(num_patches, num_patches),
+                                      mode='nearest').squeeze()
+
+        # Apply masks
+        cropped_desc = cropped_desc * mask_cropped
+        template_desc = template_desc * mask_template
+
+        # Reshape to 2D for similarity computation
+        cropped_desc_2d = cropped_desc.reshape(cropped_desc.shape[0], -1).t()
+        template_desc_2d = template_desc.reshape(template_desc.shape[0], -1).t()
+
+        # Normalize descriptors
+        cropped_desc_2d = F.normalize(cropped_desc_2d, p=2, dim=1)
+        template_desc_2d = F.normalize(template_desc_2d, p=2, dim=1)
+
+        # Compute similarity matrix
+        similarity = torch.mm(cropped_desc_2d, template_desc_2d.t())
+
+        # Find best matches in both directions
+        best_template_match = similarity.max(dim=1)[1]
+        best_cropped_match = similarity.max(dim=0)[1]
+
+        # Find mutual best matches
+        mutual_best = (best_template_match[best_cropped_match] == torch.arange(similarity.shape[1], device=self.device))
+        mutual_best_indices = torch.where(mutual_best)[0]
+
+        # Sort mutual best matches by similarity score
+        mutual_best_scores = similarity[best_cropped_match[mutual_best_indices], mutual_best_indices]
+        sorted_indices = torch.argsort(mutual_best_scores, descending=True)
+
+        # Select top matches
+        top_indices = sorted_indices[:min(num_pairs, len(sorted_indices))]
+
+        # Convert to (y, x) coordinates
+        points1 = []  # Cropped image points
+        points2 = []  # Template image points
+        for idx in top_indices:
+            cropped_idx = best_cropped_match[mutual_best_indices[idx]]
+            template_idx = mutual_best_indices[idx]
+
+            y1, x1 = divmod(int(cropped_idx), num_patches)
+            y2, x2 = divmod(int(template_idx), num_patches)
+
+            # Convert to original image coordinates
+            x1_show = (int(x1) - 1) * self.stride[1] + self.stride[1] + self.p // 2
+            y1_show = (int(y1) - 1) * self.stride[0] + self.stride[0] + self.p // 2
+            x2_show = (int(x2) - 1) * self.stride[1] + self.stride[1] + self.p // 2
+            y2_show = (int(y2) - 1) * self.stride[0] + self.stride[0] + self.p // 2
+
+            points1.append((y1_show, x1_show))
+            points2.append((y2_show, x2_show))
+
+        # Scale the points
+        points1 = [(int(y * scale_factor), int(x * scale_factor)) for y, x in points1]
+        points2 = [(int(y * scale_factor), int(x * scale_factor)) for y, x in points2]
+
+
+        end_time_corr = time.time()
+        print(f"Correspondence finding time: {end_time_corr - start_time_corr:.2f} seconds")
+
+        return points1, points2, cropped_image, template_image
+
+    def find_correspondences_sd_dino_own4(self, mask, cropped_image, cropped_pil, template_image, template_pil,
+                                          model_sd, aug_sd, image_size_sd, scale_factor, num_patches,
+                                          num_pairs: int = 20, layer: int = 11, facet: str = 'token') -> Tuple[
+        List[Tuple[float, float]], List[Tuple[float, float]], Image.Image, Image.Image]:
+
+        result = []
+
+        start_time_corr = time.time()
+        with torch.no_grad():
+            """ Descriptor 1: Cropped_Image """
+            # Stable Diffusion
+            img_sd1 = resize(cropped_image, image_size_sd, resize=True, to_pil=True, edge=False)
+            desc_sd1 = process_features_and_mask(model_sd, aug_sd, img_sd1, input_text=None, mask=False,
+                                                 pca=True).reshape(1, 1, -1, num_patches ** 2).permute(0, 1, 3, 2)
+            # DINOv2
+            desc_dino1 = self.extract_descriptors(cropped_pil.to(self.device), layer, facet)
+            # Normalization and Fusion
+            desc_sd1 = desc_sd1 / desc_sd1.norm(dim=-1, keepdim=True)
+            desc_dino1 = desc_dino1 / desc_dino1.norm(dim=-1, keepdim=True)
+            cropped_image_desc = torch.cat((desc_sd1, desc_dino1), dim=-1)
+
+            """ Descriptor 2: Template_Image """
+            # Stable Diffusion
+            img_sd2 = resize(template_image, image_size_sd, resize=True, to_pil=True, edge=False)
+            desc_sd2 = process_features_and_mask(model_sd, aug_sd, img_sd2, input_text=None, mask=False,
+                                                 pca=True).reshape(1, 1, -1, num_patches ** 2).permute(0, 1, 3, 2)
+            # DINOv2
+            desc_dino2 = self.extract_descriptors(template_pil.to(self.device), layer, facet)
+            # Normalization and Fusion
+            desc_sd2 = desc_sd2 / desc_sd2.norm(dim=-1, keepdim=True)
+            desc_dino2 = desc_dino2 / desc_dino2.norm(dim=-1, keepdim=True)
+            template_image_desc = torch.cat((desc_sd2, desc_dino2), dim=-1)
+
+            mask_cropped_image = get_mask(model_sd, aug_sd, cropped_image)
+            mask_template_image = get_mask(model_sd, aug_sd, template_image)
+
+            # cropped_image_desc = cropped_image_desc.permute(0, 1, 3, 2).reshape(-1, cropped_image_desc.shape[-1], num_patches,
+            #                                                           num_patches)
+            # template_image_desc = template_image_desc.permute(0, 1, 3, 2).reshape(-1, template_image_desc.shape[-1], num_patches,
+            #                                                           num_patches)
+
+            result.append([cropped_image_desc, template_image_desc, mask_cropped_image, mask_template_image])
+
+        for (feature2, feature1, mask2, mask1) in result:
+            src_feature_reshaped = feature1.squeeze().permute(1, 0).reshape(1, -1, 60, 60).cuda()
+            tgt_feature_reshaped = feature2.squeeze().permute(1, 0).reshape(1, -1, 60, 60).cuda()
+            src_img = Image.open(template_image)
+            tgt_img = Image.open(cropped_image)
+
+            patch_size = 256  # the resolution of the output image, set to 256 could be faster
+
+            src_img = resize(src_img, patch_size, resize=True, to_pil=False, edge=False)
+            tgt_img = resize(tgt_img, patch_size, resize=True, to_pil=False, edge=False)
+            resized_src_mask = F.interpolate(mask1.unsqueeze(0).unsqueeze(0), size=(patch_size, patch_size),
+                                             mode='nearest').squeeze().cuda()
+            resized_tgt_mask = F.interpolate(mask2.unsqueeze(0).unsqueeze(0), size=(patch_size, patch_size),
+                                             mode='nearest').squeeze().cuda()
+            src_feature_upsampled = F.interpolate(src_feature_reshaped, size=(patch_size, patch_size),
+                                                  mode='bilinear').squeeze()
+            tgt_feature_upsampled = F.interpolate(tgt_feature_reshaped, size=(patch_size, patch_size),
+                                                  mode='bilinear').squeeze()
+            # mask the feature
+            src_feature_upsampled = src_feature_upsampled * resized_src_mask.repeat(src_feature_upsampled.shape[0], 1,
+                                                                                    1)
+            tgt_feature_upsampled = tgt_feature_upsampled * resized_tgt_mask.repeat(src_feature_upsampled.shape[0], 1,
+                                                                                    1)
+            # Set the masked area to a very small number
+            src_feature_upsampled[src_feature_upsampled == 0] = -100000
+            tgt_feature_upsampled[tgt_feature_upsampled == 0] = -100000
+            # Calculate the cosine similarity between src_feature and tgt_feature
+            src_features_2d = src_feature_upsampled.reshape(src_feature_upsampled.shape[0], -1).permute(1, 0)
+            tgt_features_2d = tgt_feature_upsampled.reshape(tgt_feature_upsampled.shape[0], -1).permute(1, 0)
+            swapped_image = src_img
+            mapping = torch.zeros(patch_size, patch_size, 2).cuda()
+            for patch_idx in tqdm(range(patch_size * patch_size)):
+                # If the patch is in the resized_src_mask_out_layers, find the corresponding patch in the target_output a
+                if resized_src_mask[patch_idx // patch_size, patch_idx % patch_size] == 1:
+                    # Find the corresponding patch with the highest cosine similarity
+                    distances = torch.linalg.norm(tgt_features_2d - src_features_2d[patch_idx], dim=1)
+                    tgt_patch_idx = torch.argmin(distances)
+
+                    tgt_patch_row = tgt_patch_idx // patch_size
+                    tgt_patch_col = tgt_patch_idx % patch_size
+
+                    # Swap the patches in output
+                    #swapped_image[patch_idx // patch_size, patch_idx % patch_size, :] = tgt_img[tgt_patch_row,
+                    #                                                                    tgt_patch_col, :]
+                    #mapping[patch_idx // patch_size, patch_idx % patch_size] = torch.tensor(
+                    #    [tgt_patch_row, tgt_patch_col])
+            # save the swapped image
+
+            points1, points2 = [], []
+            for match in best_matches:
+
+                x1_show = int(x1 * self.stride[1] + self.stride[1] + self.p // 2)
+                y1_show = int(y1 * self.stride[0] + self.stride[0] + self.p // 2)
+                x2_show = int(x2 * self.stride[1] + self.stride[1] + self.p // 2)
+                y2_show = int(y2 * self.stride[0] + self.stride[0] + self.p // 2)
+
+                points1.append((y1_show, x1_show))
+                points2.append((y2_show, x2_show))
+
+            # Scale the points
+            points1 = [(int(y * scale_factor), int(x * scale_factor)) for y, x in points1]
+            points2 = [(int(y * scale_factor), int(x * scale_factor)) for y, x in points2]
+
+
+        return points1, points2, cropped_image, template_image
+
+    def find_correspondences_sd_dino_own3(self, mask, cropped_image, cropped_pil, template_image, template_pil,
+                                          model_sd, aug_sd, image_size_sd, scale_factor, num_patches,
+                                          num_pairs: int = 20, layer: int = 11, facet: str = 'token') -> Tuple[
+        List[Tuple[float, float]], List[Tuple[float, float]], Image.Image, Image.Image]:
+
+        def show_debug_images(trg_dense_output, src_color_map):
+            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(20, 10))
+
+            # Display trg_dense_output
+            ax1.imshow(trg_dense_output)
+            ax1.set_title(f"Target Dense Output - Size: {trg_dense_output.shape[1]}x{trg_dense_output.shape[0]}")
+            ax1.axis('off')
+
+            # Display src_color_map
+            ax2.imshow(src_color_map)
+            ax2.set_title(f"Source Color Map - Size: {src_color_map.shape[1]}x{src_color_map.shape[0]}")
+            ax2.axis('off')
+
+            plt.tight_layout()
+            plt.show()
+
+        def perform_clustering(features, n_clusters=10):
+            # Normalize features
+            features = F.normalize(features, p=2, dim=1)
+            # Convert the features to float32
+            features = features.cpu().detach().numpy().astype('float32')
+            # Initialize a k-means clustering index with the desired number of clusters
+            kmeans = KMeans(n_clusters=n_clusters, random_state=0)
+            # Train the k-means index with the features
+            kmeans.fit(features)
+            # Assign the features to their nearest cluster
+            labels = kmeans.predict(features)
+
+            return labels
+
+        result = []
+
+        start_time_corr = time.time()
+        with torch.no_grad():
+
+            """ Descriptor 1: Cropped_Image """
+            # Stable Diffusion
+            img_sd1 = resize(cropped_image, image_size_sd, resize=True, to_pil=True, edge=False)
+            desc_sd1 = process_features_and_mask(model_sd, aug_sd, img_sd1, input_text=None, mask=False,
+                                                 pca=True).reshape(1, 1, -1, num_patches ** 2).permute(0, 1, 3, 2)
+            # DINOv2
+            desc_dino1 = self.extract_descriptors(cropped_pil.to(self.device), layer, facet)
+            # Normalization and Fusion
+            desc_sd1 = desc_sd1 / desc_sd1.norm(dim=-1, keepdim=True)
+            desc_dino1 = desc_dino1 / desc_dino1.norm(dim=-1, keepdim=True)
+            cropped_image_desc = torch.cat((desc_sd1, desc_dino1), dim=-1)
+
+            """ Descriptor 2: Template_Image """
+            # Stable Diffusion
+            img_sd2 = resize(template_image, image_size_sd, resize=True, to_pil=True, edge=False)
+            desc_sd2 = process_features_and_mask(model_sd, aug_sd, img_sd2, input_text=None, mask=False,
+                                                 pca=True).reshape(1, 1, -1, num_patches ** 2).permute(0, 1, 3, 2)
+            # DINOv2
+            desc_dino2 = self.extract_descriptors(template_pil.to(self.device), layer, facet)
+            # Normalization and Fusion
+            desc_sd2 = desc_sd2 / desc_sd2.norm(dim=-1, keepdim=True)
+            desc_dino2 = desc_dino2 / desc_dino2.norm(dim=-1, keepdim=True)
+            template_image_desc = torch.cat((desc_sd2, desc_dino2), dim=-1)
+
+            mask_cropped_image = get_mask(model_sd, aug_sd, cropped_image)
+            mask_template_image = get_mask(model_sd, aug_sd, template_image)
+
+            #cropped_image_desc = cropped_image_desc.permute(0, 1, 3, 2).reshape(-1, cropped_image_desc.shape[-1], num_patches,
+            #                                                           num_patches)
+            #template_image_desc = template_image_desc.permute(0, 1, 3, 2).reshape(-1, template_image_desc.shape[-1], num_patches,
+            #                                                           num_patches)
+
+            result.append([cropped_image_desc, template_image_desc, mask_cropped_image, mask_template_image])
+
+        points1 = []
+        points2 = []
+        n_clusters = 6
+
+        for (feature1, feature2, mask1, mask2) in result:
+            num_patches = int(math.sqrt(feature1.shape[-2]))
+            feature1 = feature1.squeeze()
+            feature2 = feature2.squeeze()
+
+            src_feature_reshaped = feature1.permute(1, 0).reshape(-1, num_patches, num_patches).cuda()
+            tgt_feature_reshaped = feature2.permute(1, 0).reshape(-1, num_patches, num_patches).cuda()
+            resized_src_mask = F.interpolate(mask1.unsqueeze(0).unsqueeze(0), size=(num_patches, num_patches),
+                                             mode='nearest').squeeze().cuda()
+            resized_tgt_mask = F.interpolate(mask2.unsqueeze(0).unsqueeze(0), size=(num_patches, num_patches),
+                                             mode='nearest').squeeze().cuda()
+            src_feature_upsampled = src_feature_reshaped * resized_src_mask.repeat(src_feature_reshaped.shape[0], 1, 1)
+            tgt_feature_upsampled = tgt_feature_reshaped * resized_tgt_mask.repeat(src_feature_reshaped.shape[0], 1, 1)
+
+            feature1 = src_feature_upsampled.unsqueeze(0)
+            feature2 = tgt_feature_upsampled.unsqueeze(0)
+
+            w1, h1 = feature1.shape[2], feature1.shape[3]
+            w2, h2 = feature2.shape[2], feature2.shape[3]
+
+            features1_2d = feature1.reshape(feature1.shape[1], -1).permute(1, 0)
+            features2_2d = feature2.reshape(feature2.shape[1], -1).permute(1, 0)
+
+            labels_img1 = perform_clustering(features1_2d, n_clusters)
+            labels_img2 = perform_clustering(features2_2d, n_clusters)
+
+            cluster_means_img1 = [features1_2d.cpu().detach().numpy()[labels_img1 == i].mean(axis=0) for i in
+                                  range(n_clusters)]
+            cluster_means_img2 = [features2_2d.cpu().detach().numpy()[labels_img2 == i].mean(axis=0) for i in
+                                  range(n_clusters)]
+
+            distances = np.linalg.norm(
+                np.expand_dims(cluster_means_img1, axis=1) - np.expand_dims(cluster_means_img2, axis=0), axis=-1)
+            row_ind, col_ind = linear_sum_assignment(distances)
+
+            for i, j in zip(row_ind, col_ind):
+                # Find centroid of cluster i in image 1
+                y1, x1 = np.mean(np.where(labels_img1.reshape(w1, h1) == i), axis=1)
+                # Find centroid of matched cluster j in image 2
+                y2, x2 = np.mean(np.where(labels_img2.reshape(w2, h2) == j), axis=1)
+
+                points1.append((int(y1), int(x1)))
+                points2.append((int(y2), int(x2)))
+
+            # Scale the points
+            points1 = [(int(y * scale_factor), int(x * scale_factor)) for y, x in points1]
+            points2 = [(int(y * scale_factor), int(x * scale_factor)) for y, x in points2]
+
+        return points1, points2, cropped_image, template_image
+
+
+    def find_correspondences_sd_dino_own2(self, mask, cropped_image, cropped_pil, template_image, template_pil,
+                                         model_sd, aug_sd, image_size_sd, scale_factor, num_patches,
+                                         num_pairs: int = 20, layer: int = 11, facet: str = 'token') -> Tuple[
+        List[Tuple[float, float]], List[Tuple[float, float]], Image.Image, Image.Image]:
+
+        def show_debug_images(trg_dense_output, src_color_map):
+            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(20, 10))
+
+            # Display trg_dense_output
+            ax1.imshow(trg_dense_output)
+            ax1.set_title(f"Target Dense Output - Size: {trg_dense_output.shape[1]}x{trg_dense_output.shape[0]}")
+            ax1.axis('off')
+
+            # Display src_color_map
+            ax2.imshow(src_color_map)
+            ax2.set_title(f"Source Color Map - Size: {src_color_map.shape[1]}x{src_color_map.shape[0]}")
+            ax2.axis('off')
+
+            plt.tight_layout()
+            plt.show()
+
+        start_time_corr = time.time()
+        with torch.no_grad():
+
+            """ Descriptor 1: Cropped_Image """
+            # Stable Diffusion
+            img_sd1 = resize(cropped_image, image_size_sd, resize=True, to_pil=True, edge=False)
+            desc_sd1 = process_features_and_mask(model_sd, aug_sd, img_sd1, input_text=None, mask=False,
+                                                 pca=True).reshape(1, 1, -1, num_patches ** 2).permute(0, 1, 3, 2)
+            # DINOv2
+            desc_dino1 = self.extract_descriptors(cropped_pil.to(self.device), layer, facet)
+            # Normalization and Fusion
+            desc_sd1 = desc_sd1 / desc_sd1.norm(dim=-1, keepdim=True)
+            desc_dino1 = desc_dino1 / desc_dino1.norm(dim=-1, keepdim=True)
+            cropped_image_desc = torch.cat((desc_sd1, desc_dino1), dim=-1)
+
+            """ Descriptor 2: Template_Image """
+            # Stable Diffusion
+            img_sd2 = resize(template_image, image_size_sd, resize=True, to_pil=True, edge=False)
+            desc_sd2 = process_features_and_mask(model_sd, aug_sd, img_sd2, input_text=None, mask=False,
+                                                 pca=True).reshape(1, 1, -1, num_patches ** 2).permute(0, 1, 3, 2)
+            # DINOv2
+            desc_dino2 = self.extract_descriptors(template_pil.to(self.device), layer, facet)
+            # Normalization and Fusion
+            desc_sd2 = desc_sd2 / desc_sd2.norm(dim=-1, keepdim=True)
+            desc_dino2 = desc_dino2 / desc_dino2.norm(dim=-1, keepdim=True)
+            template_image_desc = torch.cat((desc_sd2, desc_dino2), dim=-1)
+
+            mask1 = get_mask(model_sd, aug_sd, cropped_image)
+            mask2 = get_mask(model_sd, aug_sd, template_image)
+
+            cropped_image_desc = cropped_image_desc.permute(0, 1, 3, 2).reshape(-1, cropped_image_desc.shape[-1], num_patches,
+                                                                       num_patches)
+            template_image_desc = template_image_desc.permute(0, 1, 3, 2).reshape(-1, template_image_desc.shape[-1], num_patches,
+                                                                       num_patches)
+
+            # Find nearest patches
+            trg_dense_output, src_color_map = find_nearest_patchs(mask2, mask1, template_image, cropped_image,
+                                                                       template_image_desc, cropped_image_desc,
+                                                                       mask=True, resolution=156)
+
+            show_debug_images(trg_dense_output, src_color_map)
+
+            # Use the results of find_nearest_patchs to determine correspondences
+            diff = np.abs(trg_dense_output - src_color_map)
+            total_diff = np.sum(diff, axis=-1)
+            flat_diff = total_diff.flatten()
+
+            # Get indices of the best matches (lowest differences)
+            best_matches = np.argsort(flat_diff)[:num_pairs]
+
+            points1, points2 = [], []
+            for match in best_matches:
+                y1, x1 = np.unravel_index(match, total_diff.shape)
+
+                # Find corresponding point in template image
+                y2, x2 = np.unravel_index(np.argmin(np.sum((src_color_map - trg_dense_output[y1, x1]) ** 2, axis=-1)),
+                                          src_color_map.shape[:2])
+
+                x1_show = int(x1 * self.stride[1] + self.stride[1] + self.p // 2)
+                y1_show = int(y1 * self.stride[0] + self.stride[0] + self.p // 2)
+                x2_show = int(x2 * self.stride[1] + self.stride[1] + self.p // 2)
+                y2_show = int(y2 * self.stride[0] + self.stride[0] + self.p // 2)
+
+                points1.append((y1_show, x1_show))
+                points2.append((y2_show, x2_show))
+
+            # Scale the points
+            points1 = [(int(y * scale_factor), int(x * scale_factor)) for y, x in points1]
+            points2 = [(int(y * scale_factor), int(x * scale_factor)) for y, x in points2]
+
+        end_time_corr = time.time()
+        elapsed_corr = end_time_corr - start_time_corr
+
+
+        return points1, points2, cropped_image, template_image
+
+    def find_correspondences__sd_dino_own(self, input_image, input_pil, template_image, template_pil,
+                                                   num_patches,
+                                                   model_sd, aug_sd, image_size_sd, scale_factor, num_pairs: int = 10,
+                                                   layer: int = 11, facet: str = 'token') -> Tuple[
+        List[Tuple[float, float]], List[Tuple[float, float]], Image.Image, Image.Image]:
+
+        """
+        Integrating Cluster and match function from sd dino
+        """
+
+        def find_nearest_patchs(mask1, mask2, image1, image2, features1, features2, mask=False, resolution=None,
+                                edit_image=None):
+            def polar_color_map(image_shape):
+                h, w = image_shape[:2]
+                x = np.linspace(-1, 1, w)
+                y = np.linspace(-1, 1, h)
+                xx, yy = np.meshgrid(x, y)
+
+                # Find the center of the mask
+                mask = mask2.cpu()
+                mask_center = np.array(np.where(mask > 0))
+                mask_center = np.round(np.mean(mask_center, axis=1)).astype(int)
+                mask_center_y, mask_center_x = mask_center
+
+                # Calculate distance and angle based on mask_center
+                xx_shifted, yy_shifted = xx - x[mask_center_x], yy - y[mask_center_y]
+                max_radius = np.sqrt(h ** 2 + w ** 2) / 2
+                radius = np.sqrt(xx_shifted ** 2 + yy_shifted ** 2) * max_radius
+                angle = np.arctan2(yy_shifted, xx_shifted) / (2 * np.pi) + 0.5
+
+                angle = 0.2 + angle * 0.6  # Map angle to the range [0.25, 0.75]
+                radius = np.where(radius <= max_radius, radius, max_radius)  # Limit radius values to the unit circle
+                radius = 0.2 + radius * 0.6 / max_radius  # Map radius to the range [0.1, 1]
+
+                return angle, radius
+
+            if resolution is not None:  # resize the feature map to the resolution
+                features1 = F.interpolate(features1, size=resolution, mode='bilinear')
+                features2 = F.interpolate(features2, size=resolution, mode='bilinear')
+
+            # resize the image to the shape of the feature map
+            resized_image1 = resize(image1, features1.shape[2], resize=True, to_pil=False)
+            resized_image2 = resize(image2, features2.shape[2], resize=True, to_pil=False)
+
+            if mask:  # mask the features
+                resized_mask1 = F.interpolate(mask1.cuda().unsqueeze(0).unsqueeze(0).float(), size=features1.shape[2:],
+                                              mode='nearest')
+                resized_mask2 = F.interpolate(mask2.cuda().unsqueeze(0).unsqueeze(0).float(), size=features2.shape[2:],
+                                              mode='nearest')
+                features1 = features1 * resized_mask1.repeat(1, features1.shape[1], 1, 1)
+                features2 = features2 * resized_mask2.repeat(1, features2.shape[1], 1, 1)
+                # set where mask==0 a very large number
+                features1[(features1.sum(1) == 0).repeat(1, features1.shape[1], 1, 1)] = 100000
+                features2[(features2.sum(1) == 0).repeat(1, features2.shape[1], 1, 1)] = 100000
+
+            features1_2d = features1.reshape(features1.shape[1], -1).permute(1, 0).cpu().detach().numpy()
+            features2_2d = features2.reshape(features2.shape[1], -1).permute(1, 0).cpu().detach().numpy()
+
+            features1_2d = torch.tensor(features1_2d).to("cuda")
+            features2_2d = torch.tensor(features2_2d).to("cuda")
+            resized_image1 = torch.tensor(resized_image1).to("cuda").float()
+            resized_image2 = torch.tensor(resized_image2).to("cuda").float()
+
+            mask1 = F.interpolate(mask1.cuda().unsqueeze(0).unsqueeze(0).float(), size=resized_image1.shape[:2],
+                                  mode='nearest').squeeze(0).squeeze(0)
+            mask2 = F.interpolate(mask2.cuda().unsqueeze(0).unsqueeze(0).float(), size=resized_image2.shape[:2],
+                                  mode='nearest').squeeze(0).squeeze(0)
+
+            # Mask the images
+            resized_image1 = resized_image1 * mask1.unsqueeze(-1).repeat(1, 1, 3)
+            resized_image2 = resized_image2 * mask2.unsqueeze(-1).repeat(1, 1, 3)
+            # Normalize the images to the range [0, 1]
+            resized_image1 = (resized_image1 - resized_image1.min()) / (resized_image1.max() - resized_image1.min())
+            resized_image2 = (resized_image2 - resized_image2.min()) / (resized_image2.max() - resized_image2.min())
+
+            angle, radius = polar_color_map(resized_image2.shape)
+
+            angle_mask = angle * mask2.cpu().numpy()
+            radius_mask = radius * mask2.cpu().numpy()
+
+            hsv_mask = np.zeros(resized_image2.shape, dtype=np.float32)
+            hsv_mask[:, :, 0] = angle_mask
+            hsv_mask[:, :, 1] = radius_mask
+            hsv_mask[:, :, 2] = 1
+
+            rainbow_mask2 = cv2.cvtColor((hsv_mask * 255).astype(np.uint8), cv2.COLOR_HSV2BGR) / 255
+
+            if edit_image is not None:
+                rainbow_mask2 = cv2.imread(edit_image, cv2.IMREAD_COLOR)
+                rainbow_mask2 = cv2.cvtColor(rainbow_mask2, cv2.COLOR_BGR2RGB) / 255
+                rainbow_mask2 = cv2.resize(rainbow_mask2, (resized_image2.shape[1], resized_image2.shape[0]))
+
+            # Apply the rainbow mask to image2
+            rainbow_image2 = rainbow_mask2 * mask2.cpu().numpy()[:, :, None]
+
+            # Create a white background image
+            background_color = np.array([1, 1, 1], dtype=np.float32)
+            background_image = np.ones(resized_image2.shape, dtype=np.float32) * background_color
+
+            # Apply the rainbow mask to image2 only in the regions where mask2 is 1
+            rainbow_image2 = np.where(mask2.cpu().numpy()[:, :, None] == 1, rainbow_mask2, background_image)
+
+            nearest_patches = []
+
+            distances = torch.cdist(features1_2d, features2_2d)
+            nearest_patch_indices = torch.argmin(distances, dim=1)
+            nearest_patches = torch.index_select(torch.tensor(rainbow_mask2).cuda().reshape(-1, 3), 0,
+                                                 nearest_patch_indices)
+
+            nearest_patches_image = nearest_patches.reshape(resized_image1.shape)
+            rainbow_image2 = torch.tensor(rainbow_image2).to("cuda")
+
+            # TODO: upsample the nearest_patches_image to the resolution of the original image
+            # nearest_patches_image = F.interpolate(nearest_patches_image.permute(2,0,1).unsqueeze(0), size=256, mode='bilinear').squeeze(0).permute(1,2,0)
+            # rainbow_image2 = F.interpolate(rainbow_image2.permute(2,0,1).unsqueeze(0), size=256, mode='bilinear').squeeze(0).permute(1,2,0)
+
+            nearest_patches_image = (nearest_patches_image).cpu().numpy()
+            resized_image2 = (rainbow_image2).cpu().numpy()
+
+            return nearest_patches_image, resized_image2
+
+        # Load image 1
+        img1 = cropped_image
+        img1_sd = resize(img1, image_size_sd, resize=True, to_pil=True, edge=False)
+        img1_dino = resize(img1, image_size_dino, resize=True, to_pil=True)
+
+        # Load image 2
+        img2 = template_image
+        img2_sd = resize(img2, image_size_sd, resize=True, to_pil=True, edge=False)
+        img2 = resize(img2, image_size_dino, resize=True, to_pil=True, edge=False)
+
+        with torch.no_grad():
+
+            img1_desc_sd = process_features_and_mask(model_sd, aug_sd, img1_sd, input_text=None, mask=False,
+                                                  pca=True).reshape(1, 1, -1, num_patches ** 2).permute(0, 1, 3,
+                                                                                                       2)
+            img2_desc_sd = process_features_and_mask(model_sd, aug_sd, img2_sd, input_text=None,
+                                                  mask=False, pca=True).reshape(1, 1, -1,
+                                                                              num_patches ** 2).permute(0, 1, 3,
+                                                                                                        2)
+
+            img1_batch = self.preprocess_pil(img1)
+            img1_desc_dino = self.extract_descriptors(img1_batch.to(self.device), layer, facet)
+            img2_batch = self.preprocess_pil(img2)
+            img2_desc_dino = self.extract_descriptors(img2_batch.to(self.device), layer, facet)
+
+
+            img1_desc_sd = img1_desc_sd / img1_desc_sd.norm(dim=-1, keepdim=True)
+            img2_desc_sd = img2_desc_sd / img2_desc_sd.norm(dim=-1, keepdim=True)
+
+            img1_desc_dino = img1_desc_dino / img1_desc_dino.norm(dim=-1, keepdim=True)
+            img2_desc_dino = img2_desc_dino / img2_desc_dino.norm(dim=-1, keepdim=True)
+
+
+            # cat two features together
+            img1_desc = torch.cat((img1_desc_sd, img1_desc_dino), dim=-1)
+            img2_desc = torch.cat((img2_desc_sd, img2_desc_dino), dim=-1)
+
+
+            mask1 = get_mask(model_sd, aug_sd, img1)
+            mask2 = get_mask(model_sd, aug_sd, img2)
+
+
+            img1_desc_reshaped = img1_desc.permute(0, 1, 3, 2).reshape(-1, img1_desc.shape[-1], num_patches,
+                                                                       num_patches)
+            img2_desc_reshaped = img2_desc.permute(0, 1, 3, 2).reshape(-1, img2_desc.shape[-1], num_patches,
+                                                                       num_patches)
+            trg_dense_output, src_color_map = find_nearest_patchs(mask2, mask1, img2, img1, img2_desc_reshaped,
+                                                                  img1_desc_reshaped, mask=True)
+
+
+
+        img1_y_to_show = (img1_indices_to_show / num_patches1[1]).cpu().numpy()
+        img1_x_to_show = (img1_indices_to_show % num_patches1[1]).cpu().numpy()
+        img2_y_to_show = (img2_indices_to_show / num_patches2[1]).cpu().numpy()
+        img2_x_to_show = (img2_indices_to_show % num_patches2[1]).cpu().numpy()
+
+        # Convert patch coordinates to pixel coordinates
+        points1, points2 = [], []
+        for y1, x1, y2, x2 in zip(img1_y_to_show, img1_x_to_show, img2_y_to_show, img2_x_to_show):
+            x1_show = (int(x1) - 1) * self.stride[1] + self.stride[1] + self.p // 2
+            y1_show = (int(y1) - 1) * self.stride[0] + self.stride[0] + self.p // 2
+            x2_show = (int(x2) - 1) * self.stride[1] + self.stride[1] + self.p // 2
+            y2_show = (int(y2) - 1) * self.stride[0] + self.stride[0] + self.p // 2
+            points1.append((y1_show, x1_show))
+            points2.append((y2_show, x2_show))
+
+        # Scale the points
+        points1 = [(int(y * scale_factor), int(x * scale_factor)) for y, x in points1]
+        points2 = [(int(y * scale_factor), int(x * scale_factor)) for y, x in points2]
+        end_time_bb = time.time()
+        end_time_corr = time.time()
+        elapsed_bb = end_time_bb - start_time_bb
+        elapsed_corr = end_time_corr - start_time_corr
+
+        return points1, points2, input_pil, template_pil
+
     def find_correspondences_fastkmeans_sd_dino_v5(self, input_image, input_pil, template_image, template_pil,
                                                    num_patches,
                                                    model_sd, aug_sd, image_size_sd, scale_factor, num_pairs: int = 10,
@@ -668,7 +1679,19 @@ class PoseViTExtractorSdDino(PoseViTExtractor):
 
         start_time_desc = time.time()
 
-        """ Descriptor 1: Input """
+        def visualize_similarity_heatmap(similarities, title="Descriptor Similarities Heatmap"):
+            # Ensure similarities is a 2D numpy array
+            if isinstance(similarities, torch.Tensor):
+                similarities = similarities.squeeze().cpu().numpy()
+
+            plt.figure(figsize=(12, 10))
+            sns.heatmap(similarities, cmap='viridis', cbar_kws={'label': 'Similarity'})
+            plt.title(title)
+            plt.xlabel("Template Image Patches")
+            plt.ylabel("Input Image Patches")
+            plt.show()
+
+        """ Descriptor 1: Cropped_Image """
         # Stable Diffusion
         img_sd1 = resize(input_image, image_size_sd, resize=True, to_pil=True, edge=False)
         desc_sd1 = process_features_and_mask(model_sd, aug_sd, img_sd1, input_text=None, mask=False,
@@ -681,7 +1704,7 @@ class PoseViTExtractorSdDino(PoseViTExtractor):
         descriptors1 = torch.cat((desc_sd1, desc_dino1), dim=-1)
         num_patches1 = self.num_patches
 
-        """ Descriptor 2: Template """
+        """ Descriptor 2: Template_Image """
         # Stable Diffusion
         img_sd2 = resize(template_image, image_size_sd, resize=True, to_pil=True, edge=False)
         desc_sd2 = process_features_and_mask(model_sd, aug_sd, img_sd2, input_text=None, mask=False,
@@ -702,6 +1725,8 @@ class PoseViTExtractorSdDino(PoseViTExtractor):
         similarities = chunk_cosine_sim(descriptors1, descriptors2)
         end_time_chunk_cosine = time.time()
         elapsed_time_chunk_cosine = end_time_chunk_cosine - start_time_chunk_cosine
+
+        visualize_similarity_heatmap(similarities[0, 0], "Descriptor Similarities Heatmap")
 
         start_time_bb = time.time()
         # Find mutual nearest neighbors (best buddies)

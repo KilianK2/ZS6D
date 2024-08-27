@@ -100,17 +100,12 @@ class ZS6DSdDino:
 
             show_debug_image(img_crop, "Cropped Image of full scene")
 
-
-
-
             with torch.no_grad():
                 """SD-DINO"""
                 # check if this works (but img_crop is correct)
                 img_base = img_crop.convert('RGB')
-
                 # Resizing
                 img_sd = resize(img_base, self.image_size_sd, resize=True, to_pil=True, edge=False)
-
                 show_debug_image(np.array(img_sd), "Resized SD Image of full scene")
 
                 # Stable Diffusion
@@ -121,7 +116,6 @@ class ZS6DSdDino:
                 # DINOv2
                 desc_dino = self.extractor.extract_descriptors(img_prep.to(self.device), self.layer, self.facet)
                 print(f"Shape of DINO features: {desc_dino.shape}")
-
 
                 # Normalization
                 desc_dino = desc_dino / desc_dino.norm(dim=-1, keepdim=True)
@@ -146,22 +140,22 @@ class ZS6DSdDino:
             with torch.no_grad():
 
                 """ Find Correspondences """
-                input_image = img_base # size 37x37
-                input_pil = img_prep
+                cropped_image = img_base # size 37x37
+                cropped_pil = img_prep
                 template_image = template # size 840x840
                 template_pil, _, _ = self.extractor.preprocess(template_image, load_size=self.image_size_dino)
 
-
-                # working version = 5
                 crop_size = img_crop.size[0]
 
                 # Calculate the scaling factor
                 scale_factor = crop_size / self.image_size_dino
 
+                #points1, points2, crop_pil, template_pil = self.extractor.find_correspondences_fastkmeans_sd_dino_v5(cropped_image, cropped_pil, template_image, template_pil, num_patches, self.model_sd, self.aug_sd, self.image_size_sd, scale_factor,
+                #                                                                                          num_pairs=20)
 
+                # working find_correspondences_sd_dino_own7
+                points1, points2, crop_pil, template_pil = self.extractor.find_correspondences_sd_dino_own7(cropped_image, cropped_pil, template_image, template_pil, self.model_sd, self.aug_sd, self.image_size_sd, scale_factor, num_patches, num_pairs=20)
 
-                points1, points2, crop_pil, template_pil = self.extractor.find_correspondences_fastkmeans_sd_dino_v5( input_image, input_pil, template_image, template_pil, num_patches, self.model_sd, self.aug_sd, self.image_size_sd, scale_factor,
-                                                                                                          num_pairs=20)
 
                 if not points1 or not points2:
                     raise ValueError("Insufficient correspondences found.")
@@ -172,16 +166,24 @@ class ZS6DSdDino:
 
                 show_debug_image(img_uv, "Original UV Image")
 
-
                 # resizing of img_uv
                 img_uv = cv2.resize(img_uv, (crop_size, crop_size))
-
-
 
                 show_debug_image(img_uv, "Resized UV Image")
 
                 resize_factor = float(crop_size) / img_crop.size[0]
                 print("resize_factor = " + str(resize_factor))
+                # Scale the points
+                print(scale_factor)
+                print("points1:")
+                print(points1)
+                print("points2:")
+                print(points2)
+
+                #points1 = [(int(y * scale_factor), int(x * scale_factor)) for y, x in points1]
+                #points2 = [(int(y * scale_factor), int(x * scale_factor)) for y, x in points2]
+                print("After scale_factor")
+                print(points1, points2)
 
                 R_est, t_est = utils.get_pose_from_correspondences(points1, points2,
                                                                    y_offset, x_offset,
