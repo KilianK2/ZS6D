@@ -1,6 +1,7 @@
 import torch
 import cv2
 import numpy as np
+from matplotlib import pyplot as plt
 from torchvision import transforms
 from typing import Union, List, Tuple
 import numpy as np
@@ -164,7 +165,35 @@ def weighted_solve_pnp_ransac(object_points, image_points, camera_matrix, dist_c
 
 
 def get_pose_from_correspondences(points1, points2, y_offset, x_offset, img_uv, cam_K, norm_factor, scale_factor, resize_factor=1.0):
-    
+    def visualize_points(img_uv, valid_points1, valid_points2):
+        # Create a mock image if img_uv is not provided
+        if img_uv is None:
+            img_uv = np.zeros((100, 100, 3))
+
+        # Create the plot
+        fig, ax = plt.subplots(figsize=(10, 10))
+
+        # Display the image
+        ax.imshow(img_uv)
+
+        # Plot valid_points1
+        x1 = [p[1] for p in valid_points1]  # Assuming x is the second coordinate
+        y1 = [p[0] for p in valid_points1]  # Assuming y is the first coordinate
+        ax.scatter(x1, y1, c='red', label='valid_points1', s=50)
+
+        # Plot valid_points2
+        x2 = [p[1] for p in valid_points2]  # Assuming x is the second coordinate
+        y2 = [p[0] for p in valid_points2]  # Assuming y is the first coordinate
+        ax.scatter(x2, y2, c='blue', label='valid_points2', s=50)
+
+        # Add labels and title
+        ax.set_title('Visualization of valid_points1 and valid_points2')
+        ax.legend()
+
+        # Show the plot
+        plt.show()
+
+
     # filter valid points
     valid_points1 = []
     valid_points2 = []
@@ -174,20 +203,25 @@ def get_pose_from_correspondences(points1, points2, y_offset, x_offset, img_uv, 
             valid_points2.append(point2)
     print("valid points 1:")
     print(valid_points1)
+
+    visualize_points(img_uv, valid_points1, valid_points2)
+
     # Check if enough correspondences for PnPRansac
     if len(valid_points1) < 4:
         return None, None
-    
+
+
     points2_3D = transform_2D_3D(valid_points2, img_uv, norm_factor)
 
     valid_points1 = np.array(valid_points1).astype(np.float64)/resize_factor
 
-    print("valid points 1 after transformation")
+
     print(valid_points1)
     valid_points1[:,0] += y_offset
     valid_points1[:,1] += x_offset
 
     valid_points1[:,[0,1]] = valid_points1[:,[1,0]]
+
 
     try:
         retval, rvec, tvec, inliers = cv2.solvePnPRansac(np.array(points2_3D).astype(np.float64), valid_points1, cam_K,

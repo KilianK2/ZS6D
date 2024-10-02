@@ -233,9 +233,13 @@ if __name__ == "__main__":
 
                             crop_size = img_data.crops[i].size[0]
                             scale_factor = crop_size / image_size_dino
-                            points1, points2, crop_pil, template_pil = extractor.find_correspondences_sd_dino_own7(
-                                cropped_image, cropped_pil, template_image, template_pil, model_sd, aug_sd,
-                                image_size_sd, scale_factor, num_patches, num_pairs=20)
+                            #points1, points2, crop_pil, template_pil = extractor.find_correspondences_sd_dino6a(
+                            #    cropped_image, cropped_pil, template_image, template_pil, model_sd, aug_sd,
+                            #    image_size_sd, scale_factor, num_patches, num_pairs=20)
+                            mask_template ="empty"
+                            points1, points2, crop_pil, template_pil = extractor.find_correspondences_fastkmeans_sd_dino_v11(mask_crop, mask_template, cropped_image, cropped_pil,
+                                                    template_image, template_pil,
+                                                    model_sd, aug_sd, image_size_sd, scale_factor, num_patches)
 
                             #points1, points2, crop_pil, template_pil = extractor.find_correspondences_fastkmeans_sd_dino_v5(
                             #    input_image, input_pil, template_image, template_pil, num_patches, model_sd,

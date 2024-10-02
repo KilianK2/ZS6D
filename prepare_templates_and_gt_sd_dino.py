@@ -137,14 +137,14 @@ if __name__ == "__main__":
                     # Preparing cropped image and desc
                     img = cv2.imread(os.path.join(path_template_folder, file))
 
-                    img_base = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+                    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
-                    img_crop_raw, crop_x, crop_y = img_utils.make_quadratic_crop(img_base, [x, y, w, h])
-                    img_prep, img_crop, _ = extractor.preprocess(Image.fromarray(img_crop_raw), load_size=image_size_dino)
+                    img_crop, crop_x, crop_y = img_utils.make_quadratic_crop(img, [x, y, w, h])
+                    img_prep, img_crop, _ = extractor.preprocess(Image.fromarray(img_crop), load_size=image_size_dino)
 
                     """SD-DINO"""
 
-                    img_base = Image.fromarray(img_crop_raw).convert('RGB')
+                    img_base = Image.fromarray(img_crop).convert('RGB')
 
                     # Resizing
                     img_sd = resize(img_base, image_size_sd, resize=True, to_pil=True, edge=False)
