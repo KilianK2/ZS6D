@@ -152,22 +152,10 @@ class ZS6DSdDino:
                 # Calculate the scaling factor
                 scale_factor = crop_size / self.image_size_dino
 
-                #points1, points2, crop_pil, template_pil = self.extractor.find_correspondences_fastkmeans_sd_dino_v5(cropped_image, cropped_pil, template_image, template_pil, num_patches, self.model_sd, self.aug_sd, self.image_size_sd, scale_factor,
-                #                                                                                          num_pairs=20)
-
-                #self.display_image_variables(cropped_image,cropped_pil,template_image,template_pil)
-
-
-
-                # working find_correspondences_sd_dino_own7
-                points1, points2, crop_pil, template_pil = self.extractor.find_correspondences_fastkmeans_sd_dino_v11(mask_crop, mask_template, cropped_image, cropped_pil, template_image, template_pil, self.model_sd, self.aug_sd, self.image_size_sd, scale_factor, num_patches)
-
+                points1, points2, crop_pil, template_pil = self.extractor.find_correspondences_patchwise_sd_dino_v13(mask_crop, mask_template, cropped_image, cropped_pil, template_image, template_pil, self.model_sd, self.aug_sd, self.image_size_sd, scale_factor, num_patches)
 
 
                 #self.display_points_on_images(cropped_image, template_image, points1, points2)
-
-
-
 
                 if not points1 or not points2:
                     raise ValueError("Insufficient correspondences found.")
