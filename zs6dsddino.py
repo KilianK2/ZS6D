@@ -17,7 +17,7 @@ import matplotlib.pyplot as plt
 
 class ZS6DSdDino:
 
-    def __init__(self, model_sd, aug_sd, image_size_dino, image_size_sd, layer, facet, templates_gt_path, norm_factors_path, model_type='dinov2_vitb14', stride=14, subset_templates=15,
+    def __init__(self, model_sd, aug_sd, image_size_dino, image_size_sd, layer, facet, templates_gt_path, norm_factors_path, model_type='dinov2_vitb14', stride=14, subset_templates=20,
                  max_crop_size=840):
         # Set up logging
         self.logger = logging.getLogger(self.__class__.__name__)
@@ -152,7 +152,7 @@ class ZS6DSdDino:
                 # Calculate the scaling factor
                 scale_factor = crop_size / self.image_size_dino
 
-                points1, points2, crop_pil, template_pil = self.extractor.find_correspondences_patchwise_sd_dino_v13(mask_crop, mask_template, cropped_image, cropped_pil, template_image, template_pil, self.model_sd, self.aug_sd, self.image_size_sd, scale_factor, num_patches)
+                points1, points2, crop_pil, template_pil = self.extractor.find_correspondences_patchwise_sd_dino_v12(mask_crop, mask_template, cropped_image, cropped_pil, template_image, template_pil, self.model_sd, self.aug_sd, self.image_size_sd, scale_factor, num_patches)
 
 
                 #self.display_points_on_images(cropped_image, template_image, points1, points2)

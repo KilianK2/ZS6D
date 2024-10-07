@@ -24,6 +24,7 @@ from scipy.optimize import linear_sum_assignment
 from tqdm import tqdm
 from sklearn.decomposition import PCA
 import seaborn as sns
+from external.sd_dino.utils.utils_correspondence import co_pca
 
 class PoseViTExtractorSdDino(PoseViTExtractor):
 
@@ -2710,6 +2711,141 @@ class PoseViTExtractorSdDino(PoseViTExtractor):
         # Convert patch coordinates to pixel coordinates
         points1, points2 = [], []
         for y1, x1, y2, x2 in zip(img1_y_to_show, img1_x_to_show, img2_y_to_show, img2_x_to_show):
+            x1_show = (int(x1) - 1) * self.stride[1] + self.stride[1] + self.p // 2
+            y1_show = (int(y1) - 1) * self.stride[0] + self.stride[0] + self.p // 2
+            x2_show = (int(x2) - 1) * self.stride[1] + self.stride[1] + self.p // 2
+            y2_show = (int(y2) - 1) * self.stride[0] + self.stride[0] + self.p // 2
+            points1.append((y1_show, x1_show))
+            points2.append((y2_show, x2_show))
+
+        # Apply scale factor
+        points1 = [(int(y * scale_factor), int(x * scale_factor)) for y, x in points1]
+        points2 = [(int(y * scale_factor), int(x * scale_factor)) for y, x in points2]
+
+        return points1, points2, cropped_pil, template_pil
+
+    def find_correspondences_patchwise_sd_dino_v14(self, mask_crop, mask_template, cropped_image, cropped_pil,
+                                                   template_image, template_pil,
+                                                   model_sd, aug_sd, image_size_sd, scale_factor, num_patches,
+                                                   num_pairs: int = 20,
+                                                   layer: int = 11, facet: str = 'token') -> Tuple[
+        List[Tuple[float, float]], List[Tuple[float, float]], Image.Image, Image.Image]:
+
+        patch_size = 14
+        print(patch_size)
+        print(self.stride)
+        stride = 14
+        num_patches = int(patch_size / stride * (840 // patch_size - 1) + 1)
+
+        print(num_patches)
+
+        img1_input = resize(cropped_image, image_size_sd, resize=True, to_pil=True, edge=False)
+        img1 = resize(cropped_image, 840, resize=True, to_pil=True, edge=False)
+
+        # Load image 2
+
+        img2_input = resize(template_image, image_size_sd, resize=True, to_pil=True, edge=False)
+        img2 = resize(template_image, 840, resize=True, to_pil=True, edge=False)
+
+        with torch.no_grad():
+            PCA_DIMS = [256, 256, 256]
+
+            features1 = process_features_and_mask(model_sd, aug_sd, img1_input, input_text=None, mask=False, raw=True)
+            features2 = process_features_and_mask(model_sd, aug_sd, img2_input, input_text=None, mask=False, raw=True)
+            processed_features1, processed_features2 = co_pca(features1, features2, PCA_DIMS)
+            img1_desc = processed_features1.reshape(1, 1, -1, num_patches ** 2).permute(0, 1, 3, 2)
+            img2_desc = processed_features2.reshape(1, 1, -1, num_patches ** 2).permute(0, 1, 3, 2)
+
+            img1_batch = self.preprocess_pil(img1)
+            img1_desc_dino = self.extract_descriptors(img1_batch.to(self.device), layer, facet)
+            img2_batch = self.preprocess_pil(img2)
+            img2_desc_dino = self.extract_descriptors(img2_batch.to(self.device), layer, facet)
+
+            img1_desc = img1_desc / img1_desc.norm(dim=-1, keepdim=True)
+            img2_desc = img2_desc / img2_desc.norm(dim=-1, keepdim=True)
+
+            img1_desc_dino = img1_desc_dino / img1_desc_dino.norm(dim=-1, keepdim=True)
+            img2_desc_dino = img2_desc_dino / img2_desc_dino.norm(dim=-1, keepdim=True)
+
+            img1_desc = torch.cat((img1_desc, img1_desc_dino), dim=-1)
+            img2_desc = torch.cat((img2_desc, img2_desc_dino), dim=-1)
+
+            # Doesnt work without category -> give my masks to it
+            #mask1 = get_mask(model_sd, aug_sd, img1, category[0])
+            #mask2 = get_mask(model_sd, aug_sd, img2, category[-1])
+            mask1 = mask_crop
+            mask2 = mask_template
+
+        feature1 = img1_desc
+        feature2 = img2_desc
+
+        src_feature_reshaped = feature1.squeeze().permute(1, 0).reshape(1, -1, 60, 60).cuda()
+        tgt_feature_reshaped = feature2.squeeze().permute(1, 0).reshape(1, -1, 60, 60).cuda()
+
+        patch_size = 256  # RESOLUTION of the output image, set to 256 could be faster
+
+        # src_img = resize(cropped_image, patch_size, resize=True, to_pil=False, edge=False)
+        # tgt_img = resize(tgt_img, patch_size, resize=True, to_pil=False, edge=False)
+
+        mask1 = torch.from_numpy(mask1).float().to(self.device)
+        mask2 = torch.from_numpy(mask2).float().to(self.device)
+
+        resized_src_mask = F.interpolate(mask1.unsqueeze(0).unsqueeze(0), size=(patch_size, patch_size),
+                                         mode='nearest').squeeze().cuda()
+        resized_tgt_mask = F.interpolate(mask2.unsqueeze(0).unsqueeze(0), size=(patch_size, patch_size),
+                                         mode='nearest').squeeze().cuda()
+
+        # Ensure feature tensors are on the correct device
+        src_feature_reshaped = src_feature_reshaped.to(self.device)
+        tgt_feature_reshaped = tgt_feature_reshaped.to(self.device)
+
+        src_feature_upsampled = F.interpolate(src_feature_reshaped, size=(patch_size, patch_size),
+                                              mode='bilinear').squeeze()
+        tgt_feature_upsampled = F.interpolate(tgt_feature_reshaped, size=(patch_size, patch_size),
+                                              mode='bilinear').squeeze()
+
+        # mask the feature
+        src_feature_upsampled = src_feature_upsampled * resized_src_mask.repeat(src_feature_upsampled.shape[0], 1, 1)
+        tgt_feature_upsampled = tgt_feature_upsampled * resized_tgt_mask.repeat(src_feature_upsampled.shape[0], 1, 1)
+
+        # Set the masked area to a very small number
+        src_feature_upsampled[src_feature_upsampled == 0] = -100000
+        tgt_feature_upsampled[tgt_feature_upsampled == 0] = -100000
+
+        # Calculate the cosine similarity between src_feature and tgt_feature
+        src_features_2d = src_feature_upsampled.reshape(src_feature_upsampled.shape[0], -1).permute(1, 0)
+        tgt_features_2d = tgt_feature_upsampled.reshape(tgt_feature_upsampled.shape[0], -1).permute(1, 0)
+
+        nearest_patch_indices = []
+
+        for patch_idx in tqdm(range(patch_size * patch_size)):
+            # If the patch is in the resized_src_mask_out_layers, find the corresponding patch in the target_output and swap them
+            if resized_src_mask[patch_idx // patch_size, patch_idx % patch_size] == 1:
+                # Find the corresponding patch with the highest cosine similarity
+                distances = torch.linalg.norm(tgt_features_2d - src_features_2d[patch_idx], dim=1)
+                tgt_patch_idx = torch.argmin(distances)
+                nearest_patch_indices.append(tgt_patch_idx)
+
+        nearest_patch_indices = torch.tensor(nearest_patch_indices, device=self.device)
+
+        # Convert linear indices to 2D coordinates
+        img2_y_to_show = nearest_patch_indices // patch_size
+        img2_x_to_show = nearest_patch_indices % patch_size
+
+        mask_indices = torch.arange(patch_size * patch_size, device=self.device)
+        flat_mask = resized_src_mask.flatten()
+        img1_y_to_show = mask_indices[flat_mask == 1] // patch_size
+        img1_x_to_show = mask_indices[flat_mask == 1] % patch_size
+
+
+        # Get corresponding source patch coordinates
+        #img1_y_to_show = torch.arange(patch_size * patch_size)[resized_src_mask.flatten() == 1] // patch_size
+        #img1_x_to_show = torch.arange(patch_size * patch_size)[resized_src_mask.flatten() == 1] % patch_size
+
+
+        # Convert patch coordinates to pixel coordinates
+        points1, points2 = [], []
+        for y1, x1, y2, x2 in zip(img1_y_to_show.cpu(), img1_x_to_show.cpu(), img2_y_to_show.cpu(), img2_x_to_show.cpu()):
             x1_show = (int(x1) - 1) * self.stride[1] + self.stride[1] + self.p // 2
             y1_show = (int(y1) - 1) * self.stride[0] + self.stride[0] + self.p // 2
             x2_show = (int(x2) - 1) * self.stride[1] + self.stride[1] + self.p // 2

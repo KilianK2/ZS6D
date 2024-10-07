@@ -204,7 +204,7 @@ def get_pose_from_correspondences(points1, points2, y_offset, x_offset, img_uv, 
     #print("valid points 1:")
     #print(valid_points1)
 
-    #visualize_points(img_uv, valid_points1, valid_points2)
+    visualize_points(img_uv, valid_points1, valid_points2)
 
     # Check if enough correspondences for PnPRansac
     if len(valid_points1) < 4:
