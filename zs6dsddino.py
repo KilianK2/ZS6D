@@ -19,7 +19,7 @@ import torch.nn.functional as F
 
 class ZS6DSdDino:
 
-    def __init__(self, model_sd, aug_sd, image_size_dino, image_size_sd, layer, facet, templates_gt_path, norm_factors_path, model_type='dinov2_vitb14', stride=14, subset_templates=12,
+    def __init__(self, model_sd, aug_sd, image_size_dino, image_size_sd, layer, facet, templates_gt_path, norm_factors_path, model_type='dinov2_vitb14', stride=14, subset_templates=15,
                  max_crop_size=840):
         # Set up logging
         self.logger = logging.getLogger(self.__class__.__name__)
