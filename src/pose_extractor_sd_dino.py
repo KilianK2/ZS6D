@@ -2284,7 +2284,7 @@ class PoseViTExtractorSdDino(PoseViTExtractor):
 
         return points1, points2, cropped_pil, template_pil
 
-    def find_correspondences_patchwise_sd_dino_v12(self, mask_crop, mask_template, cropped_image, cropped_pil,
+    def find_correspondences_patchwise_sd_dino_v16(self, mask_crop, mask_template, cropped_image, cropped_pil,
                                                    template_image, template_pil,
                                                    model_sd, aug_sd, image_size_sd, scale_factor, num_patches,
                                                    num_pairs: int = 20,
@@ -2337,9 +2337,8 @@ class PoseViTExtractorSdDino(PoseViTExtractor):
         nearest_patch_indices = torch.tensor(nearest_patch_indices)
 
         # Convert linear indices to 2D coordinates
-        img1_indices = torch.arange(crop_features_2d.shape[0])
-        img1_y_to_show = (img1_indices / num_patches).cpu().numpy()
-        img1_x_to_show = (img1_indices % num_patches).cpu().numpy()
+        img1_y_to_show = (nearest_patch_indices / num_patches).cpu().numpy()
+        img1_x_to_show = (nearest_patch_indices % num_patches).cpu().numpy()
         img2_y_to_show = (nearest_patch_indices / num_patches).cpu().numpy()
         img2_x_to_show = (nearest_patch_indices % num_patches).cpu().numpy()
 
@@ -2771,10 +2770,11 @@ class PoseViTExtractorSdDino(PoseViTExtractor):
             img2_desc = torch.cat((img2_desc, img2_desc_dino), dim=-1)
 
             # Doesnt work without category -> give my masks to it
-            #mask1 = get_mask(model_sd, aug_sd, img1, category[0])
-            #mask2 = get_mask(model_sd, aug_sd, img2, category[-1])
-            mask1 = mask_crop
-            mask2 = mask_template
+        category = [['can'], ['can']]
+        mask1 = get_mask(model_sd, aug_sd, img1, category[0])
+        mask2 = get_mask(model_sd, aug_sd, img2, category[-1])
+            #mask1 = mask_crop
+            #mask2 = mask_template
 
         feature1 = img1_desc
         feature2 = img2_desc
@@ -2787,8 +2787,8 @@ class PoseViTExtractorSdDino(PoseViTExtractor):
         # src_img = resize(cropped_image, patch_size, resize=True, to_pil=False, edge=False)
         # tgt_img = resize(tgt_img, patch_size, resize=True, to_pil=False, edge=False)
 
-        mask1 = torch.from_numpy(mask1).float().to(self.device)
-        mask2 = torch.from_numpy(mask2).float().to(self.device)
+        #mask1 = torch.from_numpy(mask1).float().to(self.device)
+        #mask2 = torch.from_numpy(mask2).float().to(self.device)
 
         resized_src_mask = F.interpolate(mask1.unsqueeze(0).unsqueeze(0), size=(patch_size, patch_size),
                                          mode='nearest').squeeze().cuda()
@@ -2824,6 +2824,7 @@ class PoseViTExtractorSdDino(PoseViTExtractor):
                 # Find the corresponding patch with the highest cosine similarity
                 distances = torch.linalg.norm(tgt_features_2d - src_features_2d[patch_idx], dim=1)
                 tgt_patch_idx = torch.argmin(distances)
+
                 nearest_patch_indices.append(tgt_patch_idx)
 
         nearest_patch_indices = torch.tensor(nearest_patch_indices, device=self.device)
@@ -2837,24 +2838,216 @@ class PoseViTExtractorSdDino(PoseViTExtractor):
         img1_y_to_show = mask_indices[flat_mask == 1] // patch_size
         img1_x_to_show = mask_indices[flat_mask == 1] % patch_size
 
-
-        # Get corresponding source patch coordinates
-        #img1_y_to_show = torch.arange(patch_size * patch_size)[resized_src_mask.flatten() == 1] // patch_size
-        #img1_x_to_show = torch.arange(patch_size * patch_size)[resized_src_mask.flatten() == 1] % patch_size
-
-
         # Convert patch coordinates to pixel coordinates
-        points1, points2 = [], []
-        for y1, x1, y2, x2 in zip(img1_y_to_show.cpu(), img1_x_to_show.cpu(), img2_y_to_show.cpu(), img2_x_to_show.cpu()):
-            x1_show = (int(x1) - 1) * self.stride[1] + self.stride[1] + self.p // 2
-            y1_show = (int(y1) - 1) * self.stride[0] + self.stride[0] + self.p // 2
-            x2_show = (int(x2) - 1) * self.stride[1] + self.stride[1] + self.p // 2
-            y2_show = (int(y2) - 1) * self.stride[0] + self.stride[0] + self.p // 2
-            points1.append((y1_show, x1_show))
-            points2.append((y2_show, x2_show))
+        original_image_size = 840  # As defined earlier in the function
+        scale_factor = original_image_size / patch_size
 
-        # Apply scale factor
+        points1 = [(x.item() * scale_factor, y.item() * scale_factor) for x, y in zip(img1_x_to_show, img1_y_to_show)]
+        points2 = [(x.item() * scale_factor, y.item() * scale_factor) for x, y in zip(img2_x_to_show, img2_y_to_show)]
+
+        # Print points1 and points2
+        print("Points1 (coordinates in img1):")
+        for i, point in enumerate(points1):
+            print(f"  Point {i + 1}: ({point[0]:.2f}, {point[1]:.2f})")
+
+        print("\nPoints2 (corresponding coordinates in img2):")
+        for i, point in enumerate(points2):
+            print(f"  Point {i + 1}: ({point[0]:.2f}, {point[1]:.2f})")
+
+        return points1, points2, img1, img2
+
+
+    def find_correspondences_patchwise_sd_dino_v15(self, mask_crop, mask_template, cropped_image, cropped_pil,
+                                                   template_image, template_pil,
+                                                   model_sd, aug_sd, image_size_sd, scale_factor, num_patches,
+                                                   num_pairs: int = 20,
+                                                   layer: int = 11, facet: str = 'token') -> Tuple[
+        List[Tuple[float, float]], List[Tuple[float, float]], Image.Image, Image.Image]:
+
+        patch_size = 14
+        print(patch_size)
+        print(self.stride)
+        stride = 14
+        num_patches = int(patch_size / stride * (840 // patch_size - 1) + 1)
+
+        print(num_patches)
+
+        img1_input = resize(cropped_image, image_size_sd, resize=True, to_pil=True, edge=False)
+        img1 = resize(cropped_image, 840, resize=True, to_pil=True, edge=False)
+
+        # Load image 2
+
+        img2_input = resize(template_image, image_size_sd, resize=True, to_pil=True, edge=False)
+        img2 = resize(template_image, 840, resize=True, to_pil=True, edge=False)
+
+        with torch.no_grad():
+            PCA_DIMS = [256, 256, 256]
+
+            features1 = process_features_and_mask(model_sd, aug_sd, img1_input, input_text=None, mask=False, raw=True)
+            features2 = process_features_and_mask(model_sd, aug_sd, img2_input, input_text=None, mask=False, raw=True)
+            processed_features1, processed_features2 = co_pca(features1, features2, PCA_DIMS)
+            img1_desc = processed_features1.reshape(1, 1, -1, num_patches ** 2).permute(0, 1, 3, 2)
+            img2_desc = processed_features2.reshape(1, 1, -1, num_patches ** 2).permute(0, 1, 3, 2)
+
+            img1_batch = self.preprocess_pil(img1)
+            img1_desc_dino = self.extract_descriptors(img1_batch.to(self.device), layer, facet)
+            img2_batch = self.preprocess_pil(img2)
+            img2_desc_dino = self.extract_descriptors(img2_batch.to(self.device), layer, facet)
+
+            img1_desc = img1_desc / img1_desc.norm(dim=-1, keepdim=True)
+            img2_desc = img2_desc / img2_desc.norm(dim=-1, keepdim=True)
+
+            img1_desc_dino = img1_desc_dino / img1_desc_dino.norm(dim=-1, keepdim=True)
+            img2_desc_dino = img2_desc_dino / img2_desc_dino.norm(dim=-1, keepdim=True)
+
+            img1_desc = torch.cat((img1_desc, img1_desc_dino), dim=-1)
+            img2_desc = torch.cat((img2_desc, img2_desc_dino), dim=-1)
+
+        ###
+        feature1 = img1_desc
+        num_patches = int(math.sqrt(feature1.shape[-2]))
+        # pca the concatenated feature to 3 dimensions
+        feature1 = img1_desc.squeeze()
+        feature2 = img2_desc.squeeze()
+        chennel_dim = feature1.shape[-1]
+
+        category = [['can'], ['can']]
+        mask1 = get_mask(model_sd, aug_sd, img1, category[0])
+        mask2 = get_mask(model_sd, aug_sd, img2, category[-1])
+        src_feature_reshaped = feature1.squeeze().permute(1, 0).reshape(-1, num_patches, num_patches).cuda()
+        tgt_feature_reshaped = feature2.squeeze().permute(1, 0).reshape(-1, num_patches, num_patches).cuda()
+        resized_src_mask = F.interpolate(mask1.unsqueeze(0).unsqueeze(0), size=(num_patches, num_patches),
+                                         mode='nearest').squeeze().cuda()
+        resized_tgt_mask = F.interpolate(mask2.unsqueeze(0).unsqueeze(0), size=(num_patches, num_patches),
+                                         mode='nearest').squeeze().cuda()
+        src_feature_upsampled = src_feature_reshaped * resized_src_mask.repeat(src_feature_reshaped.shape[0], 1, 1)
+        tgt_feature_upsampled = tgt_feature_reshaped * resized_tgt_mask.repeat(src_feature_reshaped.shape[0], 1, 1)
+
+        feature1 = src_feature_upsampled.unsqueeze(0)
+        feature2 = tgt_feature_upsampled.unsqueeze(0)
+
+        w1, h1 = feature1.shape[2], feature1.shape[3]
+        w2, h2 = feature2.shape[2], feature2.shape[3]
+
+        features1_2d = feature1.reshape(feature1.shape[1], -1).permute(1, 0)
+        features2_2d = feature2.reshape(feature2.shape[1], -1).permute(1, 0)
+
+        def perform_clustering(features, n_clusters=10):
+            # Normalize features
+            features = F.normalize(features, p=2, dim=1)
+            # Convert the features to float32
+            features = features.cpu().detach().numpy().astype('float32')
+            # Initialize a k-means clustering index with the desired number of clusters
+            kmeans = KMeans(n_clusters=n_clusters, random_state=0)
+            # Train the k-means index with the features
+            kmeans.fit(features)
+            # Assign the features to their nearest cluster
+            labels = kmeans.predict(features)
+
+            return labels
+
+        n_clusters = 10
+        labels_img1 = perform_clustering(features1_2d, n_clusters)
+        labels_img2 = perform_clustering(features2_2d, n_clusters)
+
+        cluster_means_img1 = [features1_2d.cpu().detach().numpy()[labels_img1 == i].mean(axis=0) for i in
+                              range(n_clusters)]
+        cluster_means_img2 = [features2_2d.cpu().detach().numpy()[labels_img2 == i].mean(axis=0) for i in
+                              range(n_clusters)]
+
+        distances = np.linalg.norm(
+            np.expand_dims(cluster_means_img1, axis=1) - np.expand_dims(cluster_means_img2, axis=0), axis=-1)
+        # Use Hungarian algorithm to find the optimal bijective mapping
+        row_ind, col_ind = linear_sum_assignment(distances)
+
+        relabeled_img2 = np.zeros_like(labels_img2)
+        for i, match in zip(row_ind, col_ind):
+            relabeled_img2[labels_img2 == match] = i
+
+
+
+        # Extract pixel coordinates of the matched clusters
+        points1 = []
+        points2 = []
+
+        for cluster in range(n_clusters):
+            # Find points in image 1 belonging to the cluster
+            y1, x1 = np.where(labels_img1.reshape(w1, h1) == cluster)
+            # Find corresponding points in image 2
+            y2, x2 = np.where(relabeled_img2.reshape(w2, h2) == cluster)
+
+            if len(y1) > 0 and len(y2) > 0:
+                # Calculate mean coordinates for each cluster
+                mean_y1, mean_x1 = np.mean(y1), np.mean(x1)
+                mean_y2, mean_x2 = np.mean(y2), np.mean(x2)
+
+                # Scale coordinates back to original image size
+                scale_factor1 = 840 / w1
+                scale_factor2 = 840 / w2
+
+                pixel_x1, pixel_y1 = mean_x1 * scale_factor1, mean_y1 * scale_factor1
+                pixel_x2, pixel_y2 = mean_x2 * scale_factor2, mean_y2 * scale_factor2
+
+                points1.append((float(pixel_x1), float(pixel_y1)))
+                points2.append((float(pixel_x2), float(pixel_y2)))
+
+        # Convert lists to numpy arrays for easier manipulation
+        #points1 = np.array(points1)
+        #points2 = np.array(points2)
+
+        # Convert patch labels to pixel coordinates
+        #patch_coords1 = [(i % w1, i // w1) for i in range(labels_img1.size)]
+        #patch_coords2 = [(i % w2, i // w2) for i in range(relabeled_img2.size)]
+
+        #points1, points2 = [], []
+        #for cluster_id in range(n_clusters):
+        #    cluster1_points = [patch_coords1[idx] for idx, label in enumerate(labels_img1.flatten()) if
+        #                       label == cluster_id]
+        #    cluster2_points = [patch_coords2[idx] for idx, label in enumerate(relabeled_img2.flatten()) if
+        #                       label == cluster_id]
+
+         #   if cluster1_points and cluster2_points:
+          #      cluster1_points = np.array(cluster1_points, dtype=np.float32)
+          #      cluster2_points = np.array(cluster2_points, dtype=np.float32)
+
+          #      center1 = tuple(np.mean(cluster1_points, axis=0).tolist())
+          #      center2 = tuple(np.mean(cluster2_points, axis=0).tolist())
+
+           #     points1.append(center1)
+           #     points2.append(center2)
+
+        #points1 = [(int(round(x)), int(round(y))) for x, y in points1]
+        #points2 = [(int(round(x)), int(round(y))) for x, y in points2]
+
+        labels_img1 = labels_img1.reshape(w1, h1)
+        relabeled_img2 = relabeled_img2.reshape(w2, h2)
+
+        fig, axs = plt.subplots(1, 2, figsize=(10, 5))
+        # Plot the results
+        ax_img1 = axs[0]
+        axs[0].axis('off')
+        ax_img1.imshow(labels_img1, cmap='tab20')
+
+        ax_img2 = axs[1]
+        axs[1].axis('off')
+        ax_img2.imshow(relabeled_img2, cmap='tab20')
+
+        plt.tight_layout()
+        plt.show()
+
+        print("points before scaling 1")
+        print(points1)
+        print("points before scaling 1")
+        print(points2)
+
+        print("sclaing")
+
         points1 = [(int(y * scale_factor), int(x * scale_factor)) for y, x in points1]
         points2 = [(int(y * scale_factor), int(x * scale_factor)) for y, x in points2]
 
-        return points1, points2, cropped_pil, template_pil
+        print(points1)
+        print(points2)
+
+        return points1, points2, img1, img2
+
+

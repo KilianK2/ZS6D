@@ -237,7 +237,7 @@ if __name__ == "__main__":
                             #    cropped_image, cropped_pil, template_image, template_pil, model_sd, aug_sd,
                             #    image_size_sd, scale_factor, num_patches, num_pairs=20)
                             mask_template ="empty"
-                            points1, points2, crop_pil, template_pil = extractor.find_correspondences_kmeans_sd_dino_v13(mask_crop, mask_template, cropped_image, cropped_pil,
+                            points1, points2, crop_pil, template_pil = extractor.find_correspondences_patchwise_sd_dino_v16(mask_crop, mask_template, cropped_image, cropped_pil,
                                                     template_image, template_pil,
                                                     model_sd, aug_sd, image_size_sd, scale_factor, num_patches)
 

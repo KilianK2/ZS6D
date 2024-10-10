@@ -165,7 +165,7 @@ def weighted_solve_pnp_ransac(object_points, image_points, camera_matrix, dist_c
 
 
 def get_pose_from_correspondences(points1, points2, y_offset, x_offset, img_uv, cam_K, norm_factor, scale_factor, resize_factor=1.0):
-    def visualize_points(img_uv, valid_points1, valid_points2):
+    def visualize_points(img_uv, valid_points2):
         # Create a mock image if img_uv is not provided
         if img_uv is None:
             img_uv = np.zeros((100, 100, 3))
@@ -176,10 +176,6 @@ def get_pose_from_correspondences(points1, points2, y_offset, x_offset, img_uv, 
         # Display the image
         ax.imshow(img_uv)
 
-        # Plot valid_points1
-        x1 = [p[1] for p in valid_points1]  # Assuming x is the second coordinate
-        y1 = [p[0] for p in valid_points1]  # Assuming y is the first coordinate
-        ax.scatter(x1, y1, c='red', label='valid_points1', s=50)
 
         # Plot valid_points2
         x2 = [p[1] for p in valid_points2]  # Assuming x is the second coordinate
@@ -187,7 +183,7 @@ def get_pose_from_correspondences(points1, points2, y_offset, x_offset, img_uv, 
         ax.scatter(x2, y2, c='blue', label='valid_points2', s=50)
 
         # Add labels and title
-        ax.set_title('Visualization of valid_points1 and valid_points2')
+        ax.set_title('Visualization of valid_points for correspondences')
         ax.legend()
 
         # Show the plot
@@ -201,10 +197,9 @@ def get_pose_from_correspondences(points1, points2, y_offset, x_offset, img_uv, 
         if np.any(img_uv[point2[0], point2[1]] != [0,0,0]):
             valid_points1.append(point1)
             valid_points2.append(point2)
-    #print("valid points 1:")
-    #print(valid_points1)
 
-    visualize_points(img_uv, valid_points1, valid_points2)
+
+    visualize_points(img_uv, valid_points2)
 
     # Check if enough correspondences for PnPRansac
     if len(valid_points1) < 4:

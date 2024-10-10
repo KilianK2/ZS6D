@@ -13,11 +13,13 @@ from src.pose_extractor_sd_dino import PoseViTExtractorSdDino
 from external.sd_dino.extractor_sd import process_features_and_mask
 from external.sd_dino.utils.utils_correspondence import resize
 import matplotlib.pyplot as plt
+from sklearn.cluster import KMeans
+import torch.nn.functional as F
 
 
 class ZS6DSdDino:
 
-    def __init__(self, model_sd, aug_sd, image_size_dino, image_size_sd, layer, facet, templates_gt_path, norm_factors_path, model_type='dinov2_vitb14', stride=14, subset_templates=20,
+    def __init__(self, model_sd, aug_sd, image_size_dino, image_size_sd, layer, facet, templates_gt_path, norm_factors_path, model_type='dinov2_vitb14', stride=14, subset_templates=12,
                  max_crop_size=840):
         # Set up logging
         self.logger = logging.getLogger(self.__class__.__name__)
@@ -152,7 +154,11 @@ class ZS6DSdDino:
                 # Calculate the scaling factor
                 scale_factor = crop_size / self.image_size_dino
 
-                points1, points2, crop_pil, template_pil = self.extractor.find_correspondences_patchwise_sd_dino_v12(mask_crop, mask_template, cropped_image, cropped_pil, template_image, template_pil, self.model_sd, self.aug_sd, self.image_size_sd, scale_factor, num_patches)
+                print("scale_factor:")
+                print(scale_factor)
+
+                # find_correspondences_patchwise_sd_dino_v16 for
+                points1, points2, crop_pil, template_pil = self.extractor.find_correspondences_patchwise_sd_dino_v16(mask_crop, mask_template, cropped_image, cropped_pil, template_image, template_pil, self.model_sd, self.aug_sd, self.image_size_sd, scale_factor, num_patches)
 
 
                 #self.display_points_on_images(cropped_image, template_image, points1, points2)
@@ -169,7 +175,6 @@ class ZS6DSdDino:
                 # resizing of img_uv
                 img_uv = cv2.resize(img_uv, (crop_size, crop_size))
 
-                #self.visualize_uv_points(img_uv, points2)
 
                 show_debug_image(img_uv, "Resized UV Image")
 
@@ -264,37 +269,6 @@ class ZS6DSdDino:
         plt.tight_layout()
         plt.show()
 
-    def visualize_uv_points(self, img_uv, points2, title="UV Map with Correspondence Points"):
-        """
-        Visualize the points2 on the img_uv (UV map).
-
-        Args:
-        img_uv (np.ndarray): The UV map image
-        points2 (list of tuples): Correspondence points to be plotted on the UV map
-        title (str): Title for the plot
-        """
-        # Create a figure
-        plt.figure(figsize=(12, 12))
-
-        # Display the UV map
-        plt.imshow(img_uv)
-
-        # Plot the points
-        for point in points2:
-            plt.plot(point[1], point[0], 'ro', markersize=5)  # Red dots for points
-
-        # Set title and remove axis ticks
-        plt.title(title)
-        plt.axis('off')
-
-        # Add text to show image size
-        plt.text(5, img_uv.shape[0] + 15, f"UV Map Size: {img_uv.shape[1]}x{img_uv.shape[0]}",
-                 fontsize=10, color='black')
-
-        # Show the plot
-        plt.tight_layout()
-        plt.show()
-
     def generate_template_mask(self, template_image):
         """
         Generate a binary mask from the template image.
@@ -354,5 +328,7 @@ class ZS6DSdDino:
 
         plt.tight_layout()
         plt.show()
+
+
 
 
