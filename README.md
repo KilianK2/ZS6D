@@ -1,29 +1,45 @@
 # ZS6D
 
-<img src="./assets/overview.png" width="500" alt="teaser"/>
+<img src="./assets/zs6d_sd_dino_overview.png" width="800" alt="teaser"/>
 
-We demonstrate the effectiveness of deep features extracted from self-supervised, pre-trained Vision Transformer (ViT) for Zero-shot 6D pose estimation. For more detailed information check out the corresponding [[paper](https://arxiv.org/pdf/2309.11986.pdf)].
+In this repo ZS6D-SD-DINO is introduced, a novel approach of concatenating features from Stable Diffuison(SD) and DINOv2 to accomplish zero-shot 6D object pose estimation.
 
 ## Overview of the Pipeline:
 
-![pipeline](./assets/ZS6D_pipeline.png)
+<img src="./assets/zs6d_sd_dino.png" width="800" alt="teaser"/>
 
-Note that this repo only deals with 6D pose estimation, you need segmentation masks as input. These can be obtained with supervised trained methods or zero-shot methods. For zero-shot we refer to [cnos](https://github.com/nv-nguyen/cnos).
+CNOS segments the target object from the input image. Descriptors are
+extracted using DINOv2 and SD, then concatenated. This descriptor is matched against a template database using cosine
+similarity. From the matched template, descriptors are extracted using DINOv2 and SD, then concatenated. Patchwise
+similarity matching of the extracted features establishes correspondences between the segmented input and the matched template. Finally, PnP and RANSAC are applied for the 6D object pose determination.
+
+For more information, see: [ZS6D-SD-DINO Paper](zs6d_sd_dino_paper.pdf)
+
 
 ## Installation:
 To setup the environment to run the code locally follow these steps:
 
 ```
 conda env create -f environment.yml
-conda activate zs6d
+conda activate zs6d_sd_dino
 ```
 
-Otherwise, run the following commands:
+Follow installation guide of: https://github.com/Junyi42/sd-dino
+```
+cd external
+conda install pytorch=1.13.1 torchvision=0.14.1 pytorch-cuda=11.6 -c pytorch -c nvidia
+conda install -c "nvidia/label/cuda-11.6.1" libcusolver-dev
+git clone git@github.com:Junyi42/sd-dino.git 
+```
+Important:
+change folder name ```/sd-dino``` to ```/sd_dino```
+```
+cd sd_dino
+pip install -e .
+```
+Add additional modules:
 
 ```
-conda create --name zs6d python=3.9
-conda activate zs6d
-conda install pytorch==2.0.1 torchvision==0.15.2 torchaudio==2.0.2 pytorch-cuda=11.7 -c pytorch -c nvidia
 pip install tqdm==4.65.0
 pip install timm==0.9.16
 pip install matplotlib==3.8.3
@@ -43,77 +59,38 @@ pip install numba==0.59.0
 pip install jupyter==1.0.0
 ```
 
-
-### Docker setup:
-
-### ROS integration:
+Possible Installation problems:
+1. ```cannot import name 'trunc_normal_' from 'utils' (unknown location)```
+   Solution: Change filename utils in .cache location to utils_loc 
+2. ```AttributeError: module 'PIL.Image' has no attribute 'LINEAR'```
+   Solution: Replace Image.LINEAR with Image.BILINEAR
 
 ## Template rendering:
-To generate templates from a object model to perform inference, we refer to the [ZS6D_template_rendering](https://github.com/haberger/ZS6D_template_rendering) repository.
+See:  [ZS6D_template_rendering](https://github.com/haberger/ZS6D_template_rendering) to generate templates from a object model to perform interference. 
 
 ## Template preparation:
 
-1. set up a config file for template preparation
+Do the template generation with this command in the ZS6D folder: 
 
-```zs6d_configs/template_gt_preparation_configs/your_template_config.json```
+```python3 prepare_templates_and_gt_sd_dino.py```
 
-2. run the preparation script with your config_file to generate your_template_gt_file.json and prepare the template descriptors and template uv maps
+Make sure that the templates are in the ```/templates``` folder.
 
-```python3 prepare_templates_and_gt.py --config_file zs6d_configs/template_gt_preparation_configs/your_template_config.json```
+For more information, see: https://github.com/PhilippAuss/ZS6D
 
+## Testing:
+After setting up the templates, you can run this file for an example of ZS6D-SD-DINO:
 
-## Inference:
-After setting up your_template_config.json you can instantiate your ZS6D module and perform inference. An example is provided in:
-
-```test_zs6d.ipynb```
+```test_zs6d_sd_dino.ipynb```
 
 
 ## Evaluation on BOP Datasets:
 
-1. set up a config file for BOP evaluation
-
-```zs6d_configs/bop_eval_configs/your_eval_config.json```
-
-2. Create a ground truth file for testing, the files for BOP'19-23 test images are provided for lmo, tless and ycbv. For example for lmo:
-
-```gts/test_gts/lmo_bop_test_gt_sam.json```
-
-Additionally, you have to download the corresponding [BOP test images](https://bop.felk.cvut.cz/datasets/#LM-O). If you want to test another dataset as the provided, you have to generate a ground truth file with the following structure:
-
-```json
-{
-  "object_id": [
-    {
-      "scene_id": "00001", 
-      "img_name": "relative_path_to_image/image_name.png", 
-      "obj_id": "..", 
-      "bbox_obj": [], 
-      "cam_t_m2c": [], 
-      "cam_R_m2c": [], 
-      "cam_K":[],
-      "mask_sam": [] // mask in RLE encoding
-    }
-    ,...
-  ]
-}
-```
-
-3. run the evaluation script with your_eval_config.json
-
-```python3 prepare_templates_and_gt.py --config_file zs6d_configs/template_gt_preparation_configs/your_eval_config.json```
+Add BOP dataset to ```/test``` folder
 
 
-## Acknowledgements
-This project is built upon [dino-vit-features](https://github.com/ShirAmir/dino-vit-features), which performed a very comprehensive study about features of self-supervised pretrained Vision Transformers and their applications, including local correspondence matching. Here is a link to their [paper](https://arxiv.org/abs/2112.05814). We thank the authors for their great work and repo.
+Run this file:
 
-## Citation
-If you found this repository useful please consider starring ⭐ and citing :
+```evaluate_zs6d_bop_sd_dino.py```
 
-```
-@article{ausserlechner2023zs6d,
-  title={ZS6D: Zero-shot 6D Object Pose Estimation using Vision Transformers},
-  author={Ausserlechner, Philipp and Haberger, David and Thalhammer, Stefan and Weibel, Jean-Baptiste and Vincze, Markus},
-  journal={arXiv preprint arXiv:2309.11986},
-  year={2023}
-}
-```
+For more information, see: https://github.com/PhilippAuss/ZS6D
