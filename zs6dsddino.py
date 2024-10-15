@@ -104,7 +104,7 @@ class ZS6DSdDino:
 
             with torch.no_grad():
                 """SD-DINO"""
-                # check if this works (but img_crop is correct)
+
                 img_base = img_crop.convert('RGB')
                 # Resizing
                 img_sd = resize(img_base, self.image_size_sd, resize=True, to_pil=True, edge=False)
@@ -144,9 +144,9 @@ class ZS6DSdDino:
             with torch.no_grad():
 
                 """ Find Correspondences """
-                cropped_image = img_base # size 37x37
+                cropped_image = img_base
                 cropped_pil = img_prep
-                template_image = template # size 840x840
+                template_image = template
                 template_pil, _, _ = self.extractor.preprocess(template_image, load_size=self.image_size_dino)
 
                 crop_size = img_crop.size[0]
@@ -157,11 +157,11 @@ class ZS6DSdDino:
                 print("scale_factor:")
                 print(scale_factor)
 
-                # find_correspondences_patchwise_sd_dino_v16 for
+                # find_correspondences_patchwise_sd_dino_v16 works best
                 points1, points2, crop_pil, template_pil = self.extractor.find_correspondences_patchwise_sd_dino_v16(mask_crop, mask_template, cropped_image, cropped_pil, template_image, template_pil, self.model_sd, self.aug_sd, self.image_size_sd, scale_factor, num_patches)
 
 
-                #self.display_points_on_images(cropped_image, template_image, points1, points2)
+
 
                 if not points1 or not points2:
                     raise ValueError("Insufficient correspondences found.")
