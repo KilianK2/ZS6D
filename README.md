@@ -19,6 +19,8 @@ For more information, see: [ZS6D-SD-DINO Paper](zs6d_sd_dino_paper.pdf)
 ## Installation:
 To setup the environment to run the code locally follow these steps:
 
+Important: Make sure the working project directory is named ```/ZS6D```
+
 ```
 conda env create -f environment.yml
 conda activate zs6d_sd_dino
